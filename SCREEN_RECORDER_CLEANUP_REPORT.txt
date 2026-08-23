@@ -1,0 +1,16 @@
+KNOuX REC cleanup report
+Generated: 2026-08-24T02:01:18.6226708+04:00
+Project: D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec
+Backup: D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec_PRE_CLEANUP_20260824-020113
+Removed items: 93
+
+Forbidden paths remaining: 0
+
+High-risk content hits remaining: 7
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:96: // Visual Patch Lab
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:322: // Visual Patch Lab
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:417: // Visual Patch Lab
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:418: visualPatchLab: "Visual Patch Lab",
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:512: // Visual Patch Lab
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\services\languageService.ts:607: // Visual Patch Lab
+  D:\Knoux Projects\Knoux_Project_Center\01_Ready\Knoux_Rec\components\LuxuryIcons.tsx:253: // أيقونة Visual Patch Lab

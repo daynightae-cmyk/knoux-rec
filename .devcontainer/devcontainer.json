@@ -1,0 +1,20 @@
+﻿{
+  "name": "Knouxrec Ultimate Dev Container",
+  "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:18-bullseye",
+  "postCreateCommand": "npm install",
+  "postStartCommand": "npm run start",
+  "forwardPorts": [5173],
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash",
+    "files.autoSave": "onFocusChange",
+    "editor.formatOnSave": true,
+    "eslint.enable": true,
+    "editor.tabSize": 2
+  },
+  "extensions": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-azuretools.vscode-docker",
+    "eamodio.gitlens"
+  ]
+}

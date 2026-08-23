@@ -1,0 +1,9 @@
+{
+    "name":  "KNOuX REC",
+    "description":  "Professional Windows screen recorder for screen, window, camera, microphone, system audio, screenshots, captions and export.",
+    "requestFramePermissions":  [
+                                    "camera",
+                                    "microphone"
+                                ],
+    "prompt":  ""
+}
