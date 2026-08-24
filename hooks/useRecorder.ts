@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AudioOutputDevice, CaptureSource, NativeAudioCapture, RecordingRecord, RecordingSession, RecordingState } from "../desktop/contracts";
+import type { AudioOutputDevice, CaptureSource, NativeAudioCapture, RecordingRecord, RecordingSession, RecordingState, RegionSelection } from "../desktop/contracts";
 import { screenshotService, type ScreenshotOptions, type ScreenshotResult } from "../services/screenshotService";
 
 export type RecordingQuality = "720p" | "1080p" | "1440p" | "4k";
@@ -26,6 +26,7 @@ export interface RecorderState {
   isDesktop: boolean;
   sources: CaptureSource[];
   selectedSourceId: string | null;
+  regionSelection: RegionSelection | null;
   devices: MediaDeviceInfo[];
   currentDevice: string | null;
   recordingQuality: RecordingQuality;
@@ -46,6 +47,8 @@ export interface RecorderActions {
   initialize: () => Promise<void>;
   refreshSources: () => Promise<void>;
   selectSource: (sourceId: string | null) => void;
+  selectRegion: () => Promise<void>;
+  clearRegion: () => void;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   pauseRecording: () => void;
@@ -116,6 +119,7 @@ export function useRecorder(): UseRecorderReturn {
     isDesktop: Boolean(window.knouxRec),
     sources: [],
     selectedSourceId: null,
+    regionSelection: null,
     devices: [],
     currentDevice: null,
     recordingQuality: "1080p",
@@ -137,7 +141,8 @@ export function useRecorder(): UseRecorderReturn {
   const sourceCaptureStreamRef = useRef<MediaStream | null>(null);
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
-  const compositorFrameRef = useRef<number | null>(null);
+  const regionCompositorFrameRef = useRef<number | null>(null);
+  const cameraCompositorFrameRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(0);
@@ -159,8 +164,10 @@ export function useRecorder(): UseRecorderReturn {
   }, []);
 
   const stopTracks = useCallback(() => {
-    if (compositorFrameRef.current !== null) cancelAnimationFrame(compositorFrameRef.current);
-    compositorFrameRef.current = null;
+    if (regionCompositorFrameRef.current !== null) cancelAnimationFrame(regionCompositorFrameRef.current);
+    if (cameraCompositorFrameRef.current !== null) cancelAnimationFrame(cameraCompositorFrameRef.current);
+    regionCompositorFrameRef.current = null;
+    cameraCompositorFrameRef.current = null;
     captureStreamRef.current?.getTracks().forEach((track) => track.stop());
     sourceCaptureStreamRef.current?.getTracks().forEach((track) => track.stop());
     microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -198,6 +205,26 @@ export function useRecorder(): UseRecorderReturn {
         ? previous.selectedSourceId
         : sources.find((source) => source.kind === "screen")?.id ?? sources[0]?.id ?? null,
     }));
+  }, []);
+
+  const selectRegion = useCallback(async () => {
+    try {
+      const desktop = window.knouxRec;
+      if (!desktop) throw new Error("Region recording is available only in the Windows desktop application.");
+      const regionSelection = await desktop.region.select();
+      setState((previous) => {
+        const matchingDisplay = previous.sources.find((source) => source.kind === "screen" && source.displayId === regionSelection.displayId);
+        if (!matchingDisplay) {
+          return { ...previous, error: "The selected display is no longer available for recording." };
+        }
+        return { ...previous, regionSelection, selectedSourceId: matchingDisplay.id, error: null };
+      });
+    } catch (error) {
+      setState((previous) => ({
+        ...previous,
+        error: error instanceof Error ? error.message : "Region selection failed.",
+      }));
+    }
   }, []);
 
   const refreshAudioOutputs = useCallback(async () => {
@@ -269,6 +296,42 @@ export function useRecorder(): UseRecorderReturn {
     return baseStream;
   }, []);
 
+  const composeRegion = useCallback(async (baseStream: MediaStream): Promise<MediaStream> => {
+    const region = stateRef.current.regionSelection;
+    if (!region) return baseStream;
+    const settings = baseStream.getVideoTracks()[0]?.getSettings();
+    const displayWidth = region.displayPhysicalBounds.width;
+    const displayHeight = region.displayPhysicalBounds.height;
+    if (!settings.width || !settings.height || displayWidth <= 0 || displayHeight <= 0) throw new Error("The selected display did not expose capture dimensions for region recording.");
+    const ratioX = settings.width / displayWidth;
+    const ratioY = settings.height / displayHeight;
+    const sourceX = Math.round((region.physicalBounds.x - region.displayPhysicalBounds.x) * ratioX);
+    const sourceY = Math.round((region.physicalBounds.y - region.displayPhysicalBounds.y) * ratioY);
+    const sourceWidth = Math.round(region.physicalBounds.width * ratioX);
+    const sourceHeight = Math.round(region.physicalBounds.height * ratioY);
+    if (sourceX < 0 || sourceY < 0 || sourceWidth < 1 || sourceHeight < 1 || sourceX + sourceWidth > settings.width + 1 || sourceY + sourceHeight > settings.height + 1) {
+      throw new Error("The region could not be mapped safely to the captured display.");
+    }
+    const input = document.createElement("video");
+    input.muted = true;
+    input.playsInline = true;
+    input.srcObject = baseStream;
+    await input.play();
+    const canvas = document.createElement("canvas");
+    canvas.width = sourceWidth;
+    canvas.height = sourceHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("The region compositor could not create a canvas context.");
+    const draw = () => {
+      context.drawImage(input, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight);
+      regionCompositorFrameRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    const cropped = canvas.captureStream(stateRef.current.frameRate);
+    baseStream.getAudioTracks().forEach((track) => cropped.addTrack(track));
+    return cropped;
+  }, []);
+
   const composeCamera = useCallback(async (baseStream: MediaStream): Promise<MediaStream> => {
     const snapshot = stateRef.current;
     if (!snapshot.includeCamera) return baseStream;
@@ -316,7 +379,7 @@ export function useRecorder(): UseRecorderReturn {
       context.strokeStyle = "rgba(255,255,255,0.85)";
       context.lineWidth = Math.max(2, Math.round(width * 0.002));
       context.stroke();
-      compositorFrameRef.current = requestAnimationFrame(draw);
+      cameraCompositorFrameRef.current = requestAnimationFrame(draw);
     };
     draw();
     const composite = canvas.captureStream(snapshot.frameRate);
@@ -345,8 +408,9 @@ export function useRecorder(): UseRecorderReturn {
     }
     const withMicrophone = await attachMicrophone(stream);
     sourceCaptureStreamRef.current = withMicrophone;
-    return composeCamera(withMicrophone);
-  }, [attachMicrophone, composeCamera]);
+    const cropped = await composeRegion(withMicrophone);
+    return composeCamera(cropped);
+  }, [attachMicrophone, composeCamera, composeRegion]);
 
   const finalize = useCallback(async () => {
     const active = activeSessionRef.current;
@@ -611,7 +675,9 @@ export function useRecorder(): UseRecorderReturn {
     actions: {
       initialize,
       refreshSources,
-      selectSource: (selectedSourceId) => setState((previous) => ({ ...previous, selectedSourceId })),
+      selectSource: (selectedSourceId) => setState((previous) => ({ ...previous, selectedSourceId, regionSelection: null })),
+      selectRegion,
+      clearRegion: () => setState((previous) => ({ ...previous, regionSelection: null })),
     startRecording,
     stopRecording,
       pauseRecording,
@@ -636,6 +702,7 @@ export function useRecorder(): UseRecorderReturn {
     refreshAudioOutputs,
     refreshSources,
     resumeRecording,
+    selectRegion,
     revealLastRecording,
     setRecordingQuality,
     startRecording,

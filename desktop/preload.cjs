@@ -8,6 +8,16 @@ contextBridge.exposeInMainWorld("knouxRec", {
   capture: {
     listSources: (options) => invoke("capture:list-sources", options),
   },
+  region: {
+    select: () => invoke("region:select"),
+    complete: (bounds) => ipcRenderer.send("region:confirm", bounds),
+    cancel: () => ipcRenderer.send("region:cancel"),
+    onConfiguration: (listener) => {
+      const handler = (_event, payload) => listener(payload);
+      ipcRenderer.on("region:configuration", handler);
+      return () => ipcRenderer.removeListener("region:configuration", handler);
+    },
+  },
   audio: {
     listOutputDevices: () => invoke("audio:list-output-devices"),
     startNativeSystemAudio: (deviceId) => invoke("audio:start-native-system", deviceId),
@@ -23,6 +33,8 @@ contextBridge.exposeInMainWorld("knouxRec", {
     list: () => invoke("recording:list"),
     reveal: (id) => invoke("recording:reveal", id),
     open: (id) => invoke("recording:open", id),
+    revealNativeAudio: (id) => invoke("recording:reveal-native-audio", id),
+    openNativeAudio: (id) => invoke("recording:open-native-audio", id),
     remove: (id) => invoke("recording:remove", id),
   },
   settings: {

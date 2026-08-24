@@ -2,7 +2,17 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
-const required = ["dist/index.html", "desktop/main.cjs", "desktop/preload.cjs", "package.json"];
+const required = [
+  "dist/index.html",
+  "desktop/main.cjs",
+  "desktop/preload.cjs",
+  "desktop/native-audio.cjs",
+  "desktop/region-overlay.cjs",
+  "desktop/audio-helper/runtime/KnouxRecAudioHelper.exe",
+  "desktop/audio-helper/runtime/NAudio.Core.dll",
+  "desktop/audio-helper/runtime/NAudio.Wasapi.dll",
+  "package.json",
+];
 const failures = [];
 
 for (const relativePath of required) {
@@ -16,8 +26,22 @@ const main = readFileSync(resolve(root, "desktop/main.cjs"), "utf8");
 for (const setting of ["nodeIntegration: false", "contextIsolation: true", "sandbox: true", "webSecurity: true"]) {
   if (!main.includes(setting)) failures.push(`Missing Electron security setting: ${setting}`);
 }
-for (const channel of ["recording:start-file", "recording:append-chunk", "recording:finish-file", "capture:list-sources"]) {
+for (const channel of [
+  "recording:start-file",
+  "recording:append-chunk",
+  "recording:finish-file",
+  "recording:attach-native-audio",
+  "capture:list-sources",
+  "audio:list-output-devices",
+  "audio:start-native-system",
+  "region:select",
+]) {
   if (!main.includes(channel)) failures.push(`Missing domain IPC handler: ${channel}`);
+}
+
+const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+if (!Array.isArray(packageJson.build?.asarUnpack) || !packageJson.build.asarUnpack.includes("desktop/audio-helper/runtime/**")) {
+  failures.push("Native WASAPI runtime is not configured for ASAR unpacking.");
 }
 
 const releaseDirectory = resolve(root, "release");
@@ -25,6 +49,10 @@ if (existsSync(releaseDirectory)) {
   const files = readdirSync(releaseDirectory, { recursive: true }).map(String);
   const installers = files.filter((file) => /Setup.*\.exe$/i.test(file));
   if (!installers.length) failures.push("Release directory exists but contains no NSIS installer executable.");
+  const unpackedRuntime = resolve(releaseDirectory, "win-unpacked/resources/app.asar.unpacked/desktop/audio-helper/runtime/KnouxRecAudioHelper.exe");
+  if (existsSync(resolve(releaseDirectory, "win-unpacked")) && (!existsSync(unpackedRuntime) || statSync(unpackedRuntime).size === 0)) {
+    failures.push("Packaged application is missing the unpacked native WASAPI executable.");
+  }
 }
 
 if (failures.length) {
@@ -33,5 +61,5 @@ if (failures.length) {
   process.exitCode = 1;
 } else {
   console.log("KNOuX REC release verification passed.");
-  console.log("Validated secure Electron settings, actual IPC handlers, and required build artifacts.");
+  console.log("Validated secure Electron settings, native WASAPI/region IPC, ASAR-unpacked runtime, and required build artifacts.");
 }

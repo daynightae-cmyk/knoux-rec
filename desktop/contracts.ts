@@ -41,6 +41,14 @@ export interface CompleteRecordingInput {
   droppedFrames: number | null;
 }
 
+export interface RegionSelection {
+  displayId: string;
+  dipBounds: { x: number; y: number; width: number; height: number };
+  physicalBounds: { x: number; y: number; width: number; height: number };
+  displayPhysicalBounds: { x: number; y: number; width: number; height: number };
+  scaleFactor: number;
+}
+
 export interface AudioOutputDevice {
   id: string;
   name: string;
@@ -108,6 +116,9 @@ export interface RecorderDesktopApi {
   capture: {
     listSources: (options?: CaptureSourceOptions) => Promise<CaptureSource[]>;
   };
+  region: {
+    select: () => Promise<RegionSelection>;
+  };
   audio: {
     listOutputDevices: () => Promise<AudioOutputDevice[]>;
     startNativeSystemAudio: (deviceId: string | null) => Promise<NativeAudioCapture>;
@@ -123,6 +134,8 @@ export interface RecorderDesktopApi {
     list: () => Promise<RecordingRecord[]>;
     reveal: (id: string) => Promise<void>;
     open: (id: string) => Promise<void>;
+    revealNativeAudio: (id: string) => Promise<void>;
+    openNativeAudio: (id: string) => Promise<void>;
     remove: (id: string) => Promise<void>;
   };
   settings: {

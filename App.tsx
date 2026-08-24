@@ -8,11 +8,11 @@ type Locale = "en" | "ar";
 const copy = {
   en: {
     capture: "Capture", library: "Library", settings: "Settings", record: "Record", stop: "Stop", pause: "Pause", resume: "Resume",
-    sources: "Choose a source", refresh: "Refresh sources", selected: "Selected", systemAudio: "System audio", microphone: "Microphone",
+    sources: "Choose a source", refresh: "Refresh sources", selectRegion: "Select region", selected: "Selected", regionSelected: "Region selected", systemAudio: "System audio", microphone: "Microphone",
     target: "Capture target", frameRate: "Frame rate", quality: "Quality", desktopRequired: "Desktop capture sources are available in the KNOuX REC Windows application.",
     recording: "Recording", ready: "Ready", paused: "Paused", finalizing: "Finalizing safely", failed: "Needs attention", timer: "Elapsed", written: "Written to disk",
     sourceHint: "The picker shows live thumbnails from your connected screens and windows.", noSources: "No capture sources were found. Refresh, or verify that Windows is not blocking screen capture.",
-    last: "Latest recording", open: "Open", reveal: "Show in folder", noRecording: "No recording has been finalized in this session.", screenshot: "Screenshot", screenshotReady: "A real screenshot was saved through your browser download flow.",
+    last: "Latest recording", open: "Open", reveal: "Show in folder", openSystemAudio: "Open system WAV", noRecording: "No recording has been finalized in this session.", screenshot: "Screenshot", screenshotReady: "A real screenshot was saved through your browser download flow.",
     recordings: "Saved recordings", load: "Refresh library", emptyLibrary: "Your finalized local recordings will appear here.", delete: "Delete", created: "Created", duration: "Duration", size: "Size",
     desktopStorage: "Local storage", folder: "Recording folder", chooseFolder: "Change folder", available: "Available", unavailable: "Unavailable", writable: "Writable", yes: "Yes", no: "No",
     language: "Language", english: "English", arabic: "العربية", camera: "Available cameras", noCamera: "No camera detected", error: "Recorder error", dismiss: "Dismiss",
@@ -20,11 +20,11 @@ const copy = {
   },
   ar: {
     capture: "الالتقاط", library: "المكتبة", settings: "الإعدادات", record: "تسجيل", stop: "إيقاف", pause: "إيقاف مؤقت", resume: "استئناف",
-    sources: "اختر مصدرًا", refresh: "تحديث المصادر", selected: "المحدد", systemAudio: "صوت النظام", microphone: "الميكروفون",
+    sources: "اختر مصدرًا", refresh: "تحديث المصادر", selectRegion: "اختيار منطقة", selected: "المحدد", regionSelected: "تم اختيار منطقة", systemAudio: "صوت النظام", microphone: "الميكروفون",
     target: "هدف الالتقاط", frameRate: "معدل الإطارات", quality: "الجودة", desktopRequired: "تظهر مصادر سطح المكتب داخل تطبيق KNOuX REC على Windows.",
     recording: "جارٍ التسجيل", ready: "جاهز", paused: "متوقف مؤقتًا", finalizing: "جارٍ الإنهاء بأمان", failed: "يتطلب الانتباه", timer: "المدة", written: "المكتوب على القرص",
     sourceHint: "يعرض المنتقي صورًا مصغّرة حية للشاشات والنوافذ المتصلة.", noSources: "لم يُعثر على مصادر التقاط. حدّث القائمة أو تحقق من أن Windows لا يمنع الالتقاط.",
-    last: "أحدث تسجيل", open: "فتح", reveal: "إظهار في المجلد", noRecording: "لم يتم إنهاء أي تسجيل في هذه الجلسة.", screenshot: "لقطة شاشة", screenshotReady: "تم حفظ لقطة شاشة حقيقية عبر مسار تنزيل المتصفح.",
+    last: "أحدث تسجيل", open: "فتح", reveal: "إظهار في المجلد", openSystemAudio: "فتح WAV صوت النظام", noRecording: "لم يتم إنهاء أي تسجيل في هذه الجلسة.", screenshot: "لقطة شاشة", screenshotReady: "تم حفظ لقطة شاشة حقيقية عبر مسار تنزيل المتصفح.",
     recordings: "التسجيلات المحفوظة", load: "تحديث المكتبة", emptyLibrary: "ستظهر هنا تسجيلاتك المحلية التي تم إنهاؤها.", delete: "حذف", created: "تاريخ الإنشاء", duration: "المدة", size: "الحجم",
     desktopStorage: "التخزين المحلي", folder: "مجلد التسجيلات", chooseFolder: "تغيير المجلد", available: "المتاح", unavailable: "غير متاح", writable: "قابل للكتابة", yes: "نعم", no: "لا",
     language: "اللغة", english: "English", arabic: "العربية", camera: "الكاميرات المتاحة", noCamera: "لم يتم اكتشاف كاميرا", error: "خطأ في المسجل", dismiss: "إغلاق",
@@ -158,7 +158,7 @@ export default function App() {
         {panel === "capture" && (
           <div className="capture-layout">
             <section className="capture-primary card">
-              <div className="section-heading"><div><p className="eyebrow">{t.target}</p><h2>{t.sources}</h2><p>{state.isDesktop ? t.sourceHint : t.desktopRequired}</p></div><button className="secondary-button" disabled={isBusy || !state.isDesktop} onClick={() => void actions.refreshSources()}>{t.refresh}</button></div>
+              <div className="section-heading"><div><p className="eyebrow">{t.target}</p><h2>{t.sources}</h2><p>{state.isDesktop ? t.sourceHint : t.desktopRequired}</p></div><div className="record-actions"><button className="secondary-button" disabled={isBusy || !state.isDesktop} onClick={() => void actions.selectRegion()}>{t.selectRegion}</button><button className="secondary-button" disabled={isBusy || !state.isDesktop} onClick={() => void actions.refreshSources()}>{t.refresh}</button></div></div>
               {state.isDesktop && sourceCount > 0 ? (
                 <div className="source-grid">
                   {state.sources.map((source) => <button key={source.id} className={`source-card ${source.id === state.selectedSourceId ? "selected" : ""}`} onClick={() => actions.selectSource(source.id)} disabled={isBusy}>
@@ -182,7 +182,7 @@ export default function App() {
             </aside>
 
             <section className="record-deck card">
-              <div><p className="eyebrow">{selectedSource ? selectedSource.name : t.target}</p><h2>{state.status === "idle" ? t.ready : statusLabel(state.status, t)}</h2></div>
+              <div><p className="eyebrow">{selectedSource ? selectedSource.name : t.target}</p><h2>{state.status === "idle" ? t.ready : statusLabel(state.status, t)}</h2>{state.regionSelection && <p className="muted">{t.regionSelected}: {state.regionSelection.physicalBounds.width} × {state.regionSelection.physicalBounds.height}px</p>}</div>
               <div className="record-actions">
                 {state.status === "recording" && <button className="secondary-button" onClick={actions.pauseRecording}>{t.pause}</button>}
                 {state.status === "paused" && <button className="secondary-button" onClick={actions.resumeRecording}>{t.resume}</button>}
@@ -198,7 +198,7 @@ export default function App() {
         )}
 
         {panel === "library" && <section className="card library-panel"><div className="section-heading"><div><p className="eyebrow">LOCAL MEDIA</p><h2>{t.recordings}</h2></div><button className="secondary-button" disabled={!state.isDesktop} onClick={() => void loadLibrary()}>{t.load}</button></div>
-          {records.length ? <div className="record-table">{records.map((record) => <article key={record.id} className="record-row"><div className="record-icon">REC</div><div className="record-info"><strong>{record.fileName}</strong><span>{formatDate(record.createdAt, locale)} · {formatTime(Math.floor(record.durationMs / 1000))} · {formatBytes(record.sizeBytes)}{record.nativeSystemAudio ? ` · ${formatBytes(record.nativeSystemAudio.fileBytes)} WAV` : ""}</span></div><div className="record-actions"><button className="secondary-button" onClick={() => void window.knouxRec?.recording.open(record.id)}>{t.open}</button><button className="secondary-button" onClick={() => void window.knouxRec?.recording.reveal(record.id)}>{t.reveal}</button><button className="danger-button" onClick={() => void deleteRecord(record.id)}>{t.delete}</button></div></article>)}</div> : <div className="empty-library">{state.isDesktop ? t.emptyLibrary : t.desktopRequired}</div>}
+          {records.length ? <div className="record-table">{records.map((record) => <article key={record.id} className="record-row"><div className="record-icon">REC</div><div className="record-info"><strong>{record.fileName}</strong><span>{formatDate(record.createdAt, locale)} · {formatTime(Math.floor(record.durationMs / 1000))} · {formatBytes(record.sizeBytes)}{record.nativeSystemAudio ? ` · ${formatBytes(record.nativeSystemAudio.fileBytes)} WAV` : ""}</span></div><div className="record-actions"><button className="secondary-button" onClick={() => void window.knouxRec?.recording.open(record.id)}>{t.open}</button><button className="secondary-button" onClick={() => void window.knouxRec?.recording.reveal(record.id)}>{t.reveal}</button>{record.nativeSystemAudio && <button className="secondary-button" onClick={() => void window.knouxRec?.recording.openNativeAudio(record.id)}>{t.openSystemAudio}</button>}<button className="danger-button" onClick={() => void deleteRecord(record.id)}>{t.delete}</button></div></article>)}</div> : <div className="empty-library">{state.isDesktop ? t.emptyLibrary : t.desktopRequired}</div>}
         </section>}
 
         {panel === "settings" && <div className="settings-grid">

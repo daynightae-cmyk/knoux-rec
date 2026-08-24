@@ -9,9 +9,11 @@ const {
   shell,
   Tray,
   session,
+  screen,
 } = require("electron");
 const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
+const { openRegionOverlay } = require("./region-overlay.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -29,7 +31,9 @@ let mainWindow = null;
 let tray = null;
 const activeSessions = new Map();
 const nativeAudio = createNativeAudioService({
-  helperPath: path.join(__dirname, "audio-helper", "runtime", "KnouxRecAudioHelper.exe"),
+  helperPath: isDevelopment
+    ? path.join(__dirname, "audio-helper", "runtime", "KnouxRecAudioHelper.exe")
+    : path.join(process.resourcesPath, "app.asar.unpacked", "desktop", "audio-helper", "runtime", "KnouxRecAudioHelper.exe"),
 });
 
 function paths() {
@@ -166,6 +170,12 @@ async function listSources(rawOptions) {
 
 function installIpcHandlers() {
   ipcMain.handle("capture:list-sources", async (_event, options) => listSources(options));
+  ipcMain.handle("region:select", () => openRegionOverlay({
+    BrowserWindow,
+    ipcMain,
+    screen,
+    preloadPath: path.join(__dirname, "preload.cjs"),
+  }));
   ipcMain.handle("audio:list-output-devices", () => nativeAudio.listOutputDevices());
   ipcMain.handle("audio:start-native-system", (_event, deviceId) => nativeAudio.start(deviceId ?? null, getSettings().recordingDirectory));
   ipcMain.handle("audio:stop-native-system", async (_event, id) => nativeAudio.stop(assertString(id, "native audio ID", 80)));
@@ -294,12 +304,30 @@ function installIpcHandlers() {
     if (error) throw new Error(error);
   });
 
+  ipcMain.handle("recording:reveal-native-audio", (_event, id) => {
+    const record = readLibrary().find((item) => item.id === assertString(id, "recording ID", 80));
+    const audioPath = record?.nativeSystemAudio?.filePath;
+    if (typeof audioPath !== "string" || !fs.existsSync(audioPath)) throw new Error("Native system-audio sidecar was not found.");
+    shell.showItemInFolder(audioPath);
+  });
+
+  ipcMain.handle("recording:open-native-audio", async (_event, id) => {
+    const record = readLibrary().find((item) => item.id === assertString(id, "recording ID", 80));
+    const audioPath = record?.nativeSystemAudio?.filePath;
+    if (typeof audioPath !== "string" || !fs.existsSync(audioPath)) throw new Error("Native system-audio sidecar was not found.");
+    const error = await shell.openPath(audioPath);
+    if (error) throw new Error(error);
+  });
+
   ipcMain.handle("recording:remove", (_event, id) => {
     const recordingId = assertString(id, "recording ID", 80);
     const records = readLibrary();
     const record = records.find((item) => item.id === recordingId);
     if (!record) throw new Error("Recording was not found.");
     if (fs.existsSync(record.filePath)) fs.unlinkSync(record.filePath);
+    if (typeof record.nativeSystemAudio?.filePath === "string" && fs.existsSync(record.nativeSystemAudio.filePath)) {
+      fs.unlinkSync(record.nativeSystemAudio.filePath);
+    }
     saveLibrary(records.filter((item) => item.id !== recordingId));
   });
 

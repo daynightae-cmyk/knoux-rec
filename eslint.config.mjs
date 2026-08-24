@@ -13,6 +13,7 @@ export default tseslint.config(
       "desktop/main.cjs",
       "desktop/preload.cjs",
       "desktop/native-audio.cjs",
+      "desktop/region-overlay.cjs",
       "scripts/desktop-capture-smoke.cjs",
     ],
   },

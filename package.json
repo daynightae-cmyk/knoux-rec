@@ -78,6 +78,9 @@
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "desktop/audio-helper/runtime/**"
+    ],
     "win": {
       "icon": "public/icon.ico",
       "target": [

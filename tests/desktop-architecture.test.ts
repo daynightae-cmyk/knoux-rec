@@ -34,9 +34,38 @@ describe("KNOuX REC desktop architecture", () => {
     expect(main).toContain("No media data was written for this recording.");
   });
 
+  it("uses a bounded native WASAPI helper and does not accept an empty sidecar WAV", () => {
+    const helper = readProjectFile("desktop/audio-helper/Program.cs");
+    const service = readProjectFile("desktop/native-audio.cjs");
+    expect(helper).toContain("WasapiLoopbackCapture");
+    expect(helper).toContain("MMDeviceEnumerator");
+    expect(service).toContain("listOutputDevices");
+    expect(service).toContain("result.bytesRecorded <= 0");
+    expect(service).toContain("Native system audio produced no PCM data");
+  });
+
+  it("keeps region selection in a transparent overlay and converts DIP to physical bounds", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    const overlay = readProjectFile("desktop/region-overlay.cjs");
+    expect(main).toContain("openRegionOverlay");
+    expect(overlay).toContain("transparent: true");
+    expect(overlay).toContain("screen.dipToScreenRect");
+    expect(overlay).toContain("event.sender !== overlay.webContents");
+    expect(overlay).toContain("REGION_MIN_SIZE");
+  });
+
+  it("uses canvas compositors for region cropping and camera PiP before encoding", () => {
+    const hook = readProjectFile("hooks/useRecorder.ts");
+    expect(hook).toContain("const composeRegion");
+    expect(hook).toContain("canvas.captureStream");
+    expect(hook).toContain("const composeCamera");
+    expect(hook).toContain("sourceCaptureStreamRef");
+  });
+
   it("keeps release scripts connected to desktop packaging and verification", () => {
     const packageJson = JSON.parse(readProjectFile("package.json")) as { main: string; scripts: Record<string, string> };
     expect(packageJson.main).toBe("desktop/main.cjs");
+    expect(packageJson.scripts["build:audio-helper"]).toContain("desktop\\audio-helper\\build-helper.ps1");
     expect(packageJson.scripts["desktop:pack"]).toContain("electron-builder --dir --win");
     expect(packageJson.scripts["desktop:dist"]).toContain("electron-builder --win nsis");
     expect(packageJson.scripts["verify:release"]).toContain("scripts/verify-release.mjs");
