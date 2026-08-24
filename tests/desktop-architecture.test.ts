@@ -203,7 +203,7 @@ describe("KNOuX REC desktop architecture", () => {
     expect(app).toContain("<ProjectWorkspace");
     expect(app).toContain("window.knouxRec.project.save(project)");
     expect(workspace).toContain("window.knouxRec.project.exportSrt(selectedRecordingId)");
-    expect(workspace).toContain("window.knouxRec.project.export({ recordingId: selectedRecordingId, format: \"mp4\" })");
+    expect(workspace).toContain("window.knouxRec.project.export({ recordingId: selectedRecordingId, format: exportFormat })");
     expect(workspace).toContain("Automatic transcription is unavailable in this build.");
     expect(workspace).toContain("knoux-rec-media://recording/");
     expect(readProjectFile("desktop/main.cjs")).toContain("protocol.handle(\"knoux-rec-media\"");
