@@ -36,6 +36,15 @@ describe("KNOuX REC desktop architecture", () => {
     expect(main).toContain("No media data was written for this recording.");
   });
 
+  it("provides real local library search and sorting", () => {
+    const app = readProjectFile("App.tsx");
+    expect(app).toContain("libraryQuery");
+    expect(app).toContain("librarySort");
+    expect(app).toContain("record.fileName");
+    expect(app).toContain("sortNewest");
+    expect(app).toContain("sortDuration");
+    expect(app).toContain("libraryRecords.map");
+  });
   it("generates local recording thumbnails through constrained media paths", () => {
     const main = readProjectFile("desktop/main.cjs");
     const media = readProjectFile("desktop/media-backend.cjs");
