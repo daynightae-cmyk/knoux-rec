@@ -36,6 +36,18 @@ describe("KNOuX REC desktop architecture", () => {
     expect(main).toContain("No media data was written for this recording.");
   });
 
+  it("generates local recording thumbnails through constrained media paths", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    const media = readProjectFile("desktop/media-backend.cjs");
+    const smoke = readProjectFile("scripts/export-runtime-smoke.cjs");
+    expect(main).toContain("knoux-rec-thumbnail");
+    expect(main).toContain("paths().thumbnails");
+    expect(main).toContain("generateThumbnail");
+    expect(main).toContain("path.dirname(path.resolve(thumbnailPath))");
+    expect(media).toContain("async function generateThumbnail");
+    expect(media).toContain("FFmpeg thumbnail");
+    expect(smoke).toContain("Thumbnail smoke verification failed.");
+  });
   it("guards recording starts against low disk space and unwritable destinations", () => {
     const hook = readProjectFile("hooks/useRecorder.ts");
     const main = readProjectFile("desktop/main.cjs");

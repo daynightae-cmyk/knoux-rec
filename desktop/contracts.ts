@@ -138,6 +138,7 @@ export interface RecordingRecord {
   systemAudioMuxed: boolean;
   media: MediaProbe | null;
   projectPath: string | null;
+  thumbnailPath: string | null;
 }
 
 export interface KnouxProject {

@@ -15,7 +15,7 @@ const {
 } = require("electron");
 const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
-const { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
+const { detectEncoders, exportProjectClip, generateThumbnail, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
 const { createProjectService, getContinuousTrim } = require("./project-service.cjs");
 const { createRecoveryService } = require("./recovery-service.cjs");
@@ -54,6 +54,7 @@ function paths() {
     library: path.join(root, "recordings.json"),
     projects: path.join(root, "projects"),
     journals: path.join(root, "journals"),
+    thumbnails: path.join(root, "thumbnails"),
   };
 }
 
@@ -62,6 +63,7 @@ function ensureDirectories() {
   fs.mkdirSync(current.recordings, { recursive: true });
   fs.mkdirSync(current.projects, { recursive: true });
   fs.mkdirSync(current.journals, { recursive: true });
+  fs.mkdirSync(current.thumbnails, { recursive: true });
   if (!fs.existsSync(current.library)) fs.writeFileSync(current.library, "[]\n", "utf8");
 }
 
@@ -141,9 +143,22 @@ function registerMediaProtocol() {
     if (requestUrl.hostname !== "recording") return new Response("Not found.", { status: 404 });
     const recordingId = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(recordingId)) return new Response("Not found.", { status: 404 });
+    if (!readLibrary().some((item) => item.id === recordingId)) return new Response("Not found.", { status: 404 });
     const record = readLibrary().find((item) => item.id === recordingId);
     if (!record || typeof record.filePath !== "string" || !fs.existsSync(record.filePath)) return new Response("Not found.", { status: 404 });
     return net.fetch(pathToFileURL(record.filePath).toString());
+  });
+  protocol.handle("knoux-rec-thumbnail", (request) => {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.hostname !== "recording") return new Response("Not found.", { status: 404 });
+    const recordingId = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(recordingId)) return new Response("Not found.", { status: 404 });
+    if (!readLibrary().some((item) => item.id === recordingId)) return new Response("Not found.", { status: 404 });
+    const thumbnailPath = path.join(paths().thumbnails, `${recordingId}.jpg`);
+    if (!fs.existsSync(thumbnailPath) || path.dirname(path.resolve(thumbnailPath)) !== path.resolve(paths().thumbnails)) {
+      return new Response("Not found.", { status: 404 });
+    }
+    return net.fetch(pathToFileURL(thumbnailPath).toString());
   });
 }
 
@@ -411,6 +426,14 @@ function installIpcHandlers() {
       media,
       projectPath: null,
     };
+    try {
+      record.thumbnailPath = await generateThumbnail({
+        inputPath: filePath,
+        outputPath: path.join(paths().thumbnails, `${id}.jpg`),
+      });
+    } catch {
+      record.thumbnailPath = null;
+    }
     const createdProject = projectService().createFromRecording(record);
     record.projectPath = createdProject.path;
     saveLibrary([record, ...readLibrary().filter((item) => item.id !== id)]);
@@ -477,6 +500,8 @@ function installIpcHandlers() {
     if (typeof record.nativeSystemAudio?.filePath === "string" && fs.existsSync(record.nativeSystemAudio.filePath)) {
       fs.unlinkSync(record.nativeSystemAudio.filePath);
     }
+    const thumbnailPath = path.join(paths().thumbnails, `${recordingId}.jpg`);
+    if (fs.existsSync(thumbnailPath)) fs.unlinkSync(thumbnailPath);
     projectService().remove(recordingId);
     saveLibrary(records.filter((item) => item.id !== recordingId));
   });

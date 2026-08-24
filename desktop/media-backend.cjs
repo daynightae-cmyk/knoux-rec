@@ -185,6 +185,33 @@ async function exportProjectClip({ inputPath, outputPath, startMs = 0, endMs = n
   }
 }
 
+async function generateThumbnail({ inputPath, outputPath, seekMs = 300, width = 480 }) {
+  const source = assertExistingFile(inputPath, "Thumbnail video");
+  if (typeof outputPath !== "string" || !outputPath.trim()) throw new Error("Invalid thumbnail output path.");
+  if (!Number.isFinite(seekMs) || seekMs < 0 || seekMs > 30_000) throw new Error("Invalid thumbnail seek time.");
+  if (!Number.isInteger(width) || width < 160 || width > 640) throw new Error("Invalid thumbnail width.");
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const temporaryOutput = `${outputPath}.generating.jpg`;
+  if (fs.existsSync(temporaryOutput)) fs.unlinkSync(temporaryOutput);
+  const args = [
+    "-hide_banner", "-nostdin", "-y", "-ss", (seekMs / 1000).toFixed(3), "-i", source,
+    "-map", "0:v:0", "-frames:v", "1",
+    "-vf", `scale=${width}:-2:force_original_aspect_ratio=decrease`,
+    "-q:v", "4", temporaryOutput,
+  ];
+  try {
+    await runBinary(runtimePaths().ffmpeg, args, "FFmpeg thumbnail");
+    if (!fs.existsSync(temporaryOutput) || fs.statSync(temporaryOutput).size <= 0) {
+      throw new Error("FFmpeg thumbnail produced no image data.");
+    }
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    fs.renameSync(temporaryOutput, outputPath);
+    return outputPath;
+  } catch (error) {
+    if (fs.existsSync(temporaryOutput)) fs.unlinkSync(temporaryOutput);
+    throw error;
+  }
+}
 function readRuntimeManifest() {
   const { manifest, ffmpeg, ffprobe } = runtimePaths();
   if (!fs.existsSync(manifest)) {
@@ -225,4 +252,4 @@ async function detectEncoders() {
   });
 }
 
-module.exports = { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest };
+module.exports = { detectEncoders, exportProjectClip, generateThumbnail, muxNativeSystemAudio, probeMedia, readRuntimeManifest };
