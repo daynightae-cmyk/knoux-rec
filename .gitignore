@@ -31,3 +31,7 @@ coverage/
 .knoux-local/
 *.bak
 *.tmp
+
+# Native audio helper build cache
+desktop/audio-helper/packages/
+desktop/audio-helper/restore-diagnostic.log
