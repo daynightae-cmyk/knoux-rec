@@ -50,6 +50,7 @@ describe("KNOuX REC desktop architecture", () => {
     const media = readProjectFile("desktop/media-backend.cjs");
     const smoke = readProjectFile("scripts/export-runtime-smoke.cjs");
     expect(main).toContain("knoux-rec-thumbnail");
+    expect(main).toContain('scheme: "knoux-rec-thumbnail"');
     expect(main).toContain("paths().thumbnails");
     expect(main).toContain("generateThumbnail");
     expect(main).toContain("path.dirname(path.resolve(thumbnailPath))");

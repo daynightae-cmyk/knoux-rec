@@ -23,7 +23,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-protocol.registerSchemesAsPrivileged([{ scheme: "knoux-rec-media", privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: "knoux-rec-media", privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true, corsEnabled: true } }, { scheme: "knoux-rec-thumbnail", privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 
 const isDevelopment = !app.isPackaged;
 const MAX_CHUNK_BYTES = 128 * 1024 * 1024;
