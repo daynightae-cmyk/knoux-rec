@@ -3,6 +3,9 @@ import type { AudioOutputDevice, CaptureSource, NativeAudioCapture, RecordingRec
 import { screenshotService, type ScreenshotOptions, type ScreenshotResult } from "../services/screenshotService";
 
 export type RecordingQuality = "720p" | "1080p" | "1440p" | "4k";
+export type CaptureMode = "display" | "window" | "region";
+export type CameraPipShape = "rounded" | "circle" | "square";
+export type CameraPipPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 interface QualityPreset {
   width: number;
@@ -26,9 +29,22 @@ export interface RecorderState {
   isDesktop: boolean;
   sources: CaptureSource[];
   selectedSourceId: string | null;
+  captureMode: CaptureMode;
   regionSelection: RegionSelection | null;
   devices: MediaDeviceInfo[];
   currentDevice: string | null;
+  microphoneDevices: MediaDeviceInfo[];
+  currentMicrophoneDevice: string | null;
+  microphoneGain: number;
+  microphoneMuted: boolean;
+  microphonePeakPermille: number;
+  cameraShape: CameraPipShape;
+  cameraPosition: CameraPipPosition;
+  cameraScale: number;
+  cameraMirror: boolean;
+  cameraOpacity: number;
+  presentationPadding: number;
+  presentationBackground: string;
   recordingQuality: RecordingQuality;
   includeSystemAudio: boolean;
   includeMicrophone: boolean;
@@ -47,6 +63,7 @@ export interface RecorderActions {
   initialize: () => Promise<void>;
   refreshSources: () => Promise<void>;
   selectSource: (sourceId: string | null) => void;
+  setCaptureMode: (mode: CaptureMode) => void;
   selectRegion: () => Promise<void>;
   clearRegion: () => void;
   startRecording: () => Promise<void>;
@@ -60,6 +77,16 @@ export interface RecorderActions {
   refreshAudioOutputs: () => Promise<void>;
   setAudioOutput: (deviceId: string | null) => void;
   setDevice: (deviceId: string) => void;
+  setMicrophoneDevice: (deviceId: string | null) => void;
+  setMicrophoneGain: (gain: number) => void;
+  setMicrophoneMuted: (muted: boolean) => void;
+  setCameraShape: (shape: CameraPipShape) => void;
+  setCameraPosition: (position: CameraPipPosition) => void;
+  setCameraScale: (scale: number) => void;
+  setCameraMirror: (mirror: boolean) => void;
+  setCameraOpacity: (opacity: number) => void;
+  setPresentationPadding: (padding: number) => void;
+  setPresentationBackground: (color: string) => void;
   setFrameRate: (fps: 30 | 60) => void;
   takeScreenshot: (options?: ScreenshotOptions) => Promise<ScreenshotResult>;
   revealLastRecording: () => Promise<void>;
@@ -119,9 +146,22 @@ export function useRecorder(): UseRecorderReturn {
     isDesktop: Boolean(window.knouxRec),
     sources: [],
     selectedSourceId: null,
+    captureMode: "display",
     regionSelection: null,
     devices: [],
     currentDevice: null,
+    microphoneDevices: [],
+    currentMicrophoneDevice: null,
+    microphoneGain: 1,
+    microphoneMuted: false,
+    microphonePeakPermille: 0,
+    cameraShape: "rounded",
+    cameraPosition: "bottom-right",
+    cameraScale: 0.22,
+    cameraMirror: false,
+    cameraOpacity: 1,
+    presentationPadding: 0,
+    presentationBackground: "#10182e",
     recordingQuality: "1080p",
     includeSystemAudio: false,
     includeMicrophone: false,
@@ -143,6 +183,9 @@ export function useRecorder(): UseRecorderReturn {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const regionCompositorFrameRef = useRef<number | null>(null);
   const cameraCompositorFrameRef = useRef<number | null>(null);
+  const presentationCompositorFrameRef = useRef<number | null>(null);
+  const microphoneMeterFrameRef = useRef<number | null>(null);
+  const nativeAudioPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(0);
@@ -166,8 +209,14 @@ export function useRecorder(): UseRecorderReturn {
   const stopTracks = useCallback(() => {
     if (regionCompositorFrameRef.current !== null) cancelAnimationFrame(regionCompositorFrameRef.current);
     if (cameraCompositorFrameRef.current !== null) cancelAnimationFrame(cameraCompositorFrameRef.current);
+    if (presentationCompositorFrameRef.current !== null) cancelAnimationFrame(presentationCompositorFrameRef.current);
+    if (microphoneMeterFrameRef.current !== null) cancelAnimationFrame(microphoneMeterFrameRef.current);
+    if (nativeAudioPollRef.current !== null) clearInterval(nativeAudioPollRef.current);
     regionCompositorFrameRef.current = null;
     cameraCompositorFrameRef.current = null;
+    presentationCompositorFrameRef.current = null;
+    microphoneMeterFrameRef.current = null;
+    nativeAudioPollRef.current = null;
     captureStreamRef.current?.getTracks().forEach((track) => track.stop());
     sourceCaptureStreamRef.current?.getTracks().forEach((track) => track.stop());
     microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -246,12 +295,15 @@ export function useRecorder(): UseRecorderReturn {
       }
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices.filter((device) => device.kind === "videoinput");
+      const microphones = devices.filter((device) => device.kind === "audioinput");
       if (window.knouxRec) await Promise.all([refreshSources(), refreshAudioOutputs()]);
       setState((previous) => ({
         ...previous,
         isInitialized: true,
         devices: cameras,
         currentDevice: previous.currentDevice ?? cameras[0]?.deviceId ?? null,
+        microphoneDevices: microphones,
+        currentMicrophoneDevice: previous.currentMicrophoneDevice ?? microphones[0]?.deviceId ?? null,
         error: null,
       }));
     } catch (error) {
@@ -264,32 +316,50 @@ export function useRecorder(): UseRecorderReturn {
   }, [refreshAudioOutputs, refreshSources]);
 
   const attachMicrophone = useCallback(async (baseStream: MediaStream): Promise<MediaStream> => {
-    if (!stateRef.current.includeMicrophone) return baseStream;
+    const snapshot = stateRef.current;
+    if (!snapshot.includeMicrophone) return baseStream;
     const microphone = await navigator.mediaDevices.getUserMedia({
       audio: {
-        deviceId: undefined,
+        deviceId: snapshot.currentMicrophoneDevice ? { exact: snapshot.currentMicrophoneDevice } : undefined,
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true,
+        autoGainControl: false,
       },
       video: false,
     });
     microphoneStreamRef.current = microphone;
-    const microphoneTrack = microphone.getAudioTracks()[0];
-    if (!microphoneTrack) throw new Error("Microphone was requested but no input track was available.");
-
-    const existingAudioTracks = baseStream.getAudioTracks();
-    if (!existingAudioTracks.length) {
-      baseStream.addTrack(microphoneTrack);
-      return baseStream;
-    }
+    if (!microphone.getAudioTracks()[0]) throw new Error("Microphone was requested but no input track was available.");
 
     const audioContext = new AudioContext();
     audioContextRef.current = audioContext;
+    const microphoneSource = audioContext.createMediaStreamSource(microphone);
+    const gain = audioContext.createGain();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    gain.gain.value = snapshot.microphoneMuted ? 0 : snapshot.microphoneGain;
+    microphoneSource.connect(gain);
+    gain.connect(analyser);
+    const meterData = new Uint8Array(analyser.fftSize);
+    let lastMeterUpdate = 0;
+    const meter = (timestamp: number) => {
+      analyser.getByteTimeDomainData(meterData);
+      let peak = 0;
+      for (const sample of meterData) peak = Math.max(peak, Math.abs(sample - 128) / 128);
+      if (timestamp - lastMeterUpdate >= 80) {
+        lastMeterUpdate = timestamp;
+        setState((previous) => ({ ...previous, microphonePeakPermille: Math.round(peak * 1000) }));
+      }
+      microphoneMeterFrameRef.current = requestAnimationFrame(meter);
+    };
+    microphoneMeterFrameRef.current = requestAnimationFrame(meter);
+
     const destination = audioContext.createMediaStreamDestination();
-    audioContext.createMediaStreamSource(new MediaStream(existingAudioTracks)).connect(destination);
-    audioContext.createMediaStreamSource(microphone).connect(destination);
-    existingAudioTracks.forEach((track) => baseStream.removeTrack(track));
+    const existingAudioTracks = baseStream.getAudioTracks();
+    if (existingAudioTracks.length) {
+      audioContext.createMediaStreamSource(new MediaStream(existingAudioTracks)).connect(destination);
+      existingAudioTracks.forEach((track) => baseStream.removeTrack(track));
+    }
+    gain.connect(destination);
     const mixedTrack = destination.stream.getAudioTracks()[0];
     if (!mixedTrack) throw new Error("Audio mixing failed to produce an output track.");
     baseStream.addTrack(mixedTrack);
@@ -357,34 +427,87 @@ export function useRecorder(): UseRecorderReturn {
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("The camera compositor could not create a canvas context.");
-    const pipWidth = Math.max(160, Math.round(width * 0.22));
-    const pipHeight = Math.max(90, Math.round(pipWidth * 9 / 16));
+    const pipWidth = Math.max(120, Math.round(width * snapshot.cameraScale));
+    const pipHeight = snapshot.cameraShape === "circle" ? pipWidth : Math.max(90, Math.round(pipWidth * 9 / 16));
     const inset = Math.max(16, Math.round(width * 0.025));
+    const coordinates = () => {
+      if (snapshot.cameraPosition === "top-left") return { x: inset, y: inset };
+      if (snapshot.cameraPosition === "top-right") return { x: width - pipWidth - inset, y: inset };
+      if (snapshot.cameraPosition === "bottom-left") return { x: inset, y: height - pipHeight - inset };
+      return { x: width - pipWidth - inset, y: height - pipHeight - inset };
+    };
     const draw = () => {
+      const { x, y } = coordinates();
       context.drawImage(screenVideo, 0, 0, width, height);
       context.save();
+      context.globalAlpha = snapshot.cameraOpacity;
       context.beginPath();
-      const x = width - pipWidth - inset;
-      const y = height - pipHeight - inset;
-      const radius = Math.max(10, Math.round(pipWidth * 0.08));
-      context.moveTo(x + radius, y);
-      context.arcTo(x + pipWidth, y, x + pipWidth, y + pipHeight, radius);
-      context.arcTo(x + pipWidth, y + pipHeight, x, y + pipHeight, radius);
-      context.arcTo(x, y + pipHeight, x, y, radius);
-      context.arcTo(x, y, x + pipWidth, y, radius);
+      if (snapshot.cameraShape === "circle") {
+        context.arc(x + pipWidth / 2, y + pipHeight / 2, Math.min(pipWidth, pipHeight) / 2, 0, Math.PI * 2);
+      } else if (snapshot.cameraShape === "square") {
+        context.rect(x, y, pipWidth, pipHeight);
+      } else {
+        const radius = Math.max(10, Math.round(pipWidth * 0.08));
+        context.moveTo(x + radius, y);
+        context.arcTo(x + pipWidth, y, x + pipWidth, y + pipHeight, radius);
+        context.arcTo(x + pipWidth, y + pipHeight, x, y + pipHeight, radius);
+        context.arcTo(x, y + pipHeight, x, y, radius);
+        context.arcTo(x, y, x + pipWidth, y, radius);
+      }
       context.closePath();
       context.clip();
-      context.drawImage(cameraVideo, x, y, pipWidth, pipHeight);
+      if (snapshot.cameraMirror) {
+        context.translate(x + pipWidth, y);
+        context.scale(-1, 1);
+        context.drawImage(cameraVideo, 0, 0, pipWidth, pipHeight);
+      } else {
+        context.drawImage(cameraVideo, x, y, pipWidth, pipHeight);
+      }
       context.restore();
+      context.save();
+      context.beginPath();
+      if (snapshot.cameraShape === "circle") context.arc(x + pipWidth / 2, y + pipHeight / 2, Math.min(pipWidth, pipHeight) / 2, 0, Math.PI * 2);
+      else context.rect(x, y, pipWidth, pipHeight);
       context.strokeStyle = "rgba(255,255,255,0.85)";
       context.lineWidth = Math.max(2, Math.round(width * 0.002));
       context.stroke();
+      context.restore();
       cameraCompositorFrameRef.current = requestAnimationFrame(draw);
     };
     draw();
     const composite = canvas.captureStream(snapshot.frameRate);
     baseStream.getAudioTracks().forEach((track) => composite.addTrack(track));
     return composite;
+  }, []);
+
+  const composePresentation = useCallback(async (baseStream: MediaStream): Promise<MediaStream> => {
+    const snapshot = stateRef.current;
+    if (snapshot.presentationPadding <= 0) return baseStream;
+    const settings = baseStream.getVideoTracks()[0]?.getSettings();
+    const contentWidth = settings?.width ?? QUALITY[snapshot.recordingQuality].width;
+    const contentHeight = settings?.height ?? QUALITY[snapshot.recordingQuality].height;
+    const padding = Math.round(Math.min(contentWidth, contentHeight) * snapshot.presentationPadding);
+    if (padding < 1) return baseStream;
+    const screenVideo = document.createElement("video");
+    screenVideo.muted = true;
+    screenVideo.playsInline = true;
+    screenVideo.srcObject = baseStream;
+    await screenVideo.play();
+    const canvas = document.createElement("canvas");
+    canvas.width = contentWidth + padding * 2;
+    canvas.height = contentHeight + padding * 2;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("The presentation compositor could not create a canvas context.");
+    const draw = () => {
+      context.fillStyle = snapshot.presentationBackground;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(screenVideo, padding, padding, contentWidth, contentHeight);
+      presentationCompositorFrameRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    const composited = canvas.captureStream(snapshot.frameRate);
+    baseStream.getAudioTracks().forEach((track) => composited.addTrack(track));
+    return composited;
   }, []);
 
   const createCaptureStream = useCallback(async (): Promise<MediaStream> => {
@@ -409,8 +532,9 @@ export function useRecorder(): UseRecorderReturn {
     const withMicrophone = await attachMicrophone(stream);
     sourceCaptureStreamRef.current = withMicrophone;
     const cropped = await composeRegion(withMicrophone);
-    return composeCamera(cropped);
-  }, [attachMicrophone, composeCamera, composeRegion]);
+    const cameraComposited = await composeCamera(cropped);
+    return composePresentation(cameraComposited);
+  }, [attachMicrophone, composeCamera, composePresentation, composeRegion]);
 
   const finalize = useCallback(async () => {
     const active = activeSessionRef.current;
@@ -503,6 +627,11 @@ export function useRecorder(): UseRecorderReturn {
         const nativeAudio = await window.knouxRec.audio.startNativeSystemAudio(snapshot.selectedAudioOutputId);
         nativeAudioSessionId = nativeAudio.id;
         setState((previous) => ({ ...previous, nativeAudioCapture: nativeAudio }));
+        nativeAudioPollRef.current = setInterval(() => {
+          void window.knouxRec?.audio.getNativeSystemAudio(nativeAudio.id).then((current) => {
+            if (current) setState((previous) => ({ ...previous, nativeAudioCapture: current }));
+          }).catch(() => undefined);
+        }, 250);
       } catch (error) {
         await window.knouxRec.recording.cancelFile(desktopSession.id);
         throw error;
@@ -675,7 +804,8 @@ export function useRecorder(): UseRecorderReturn {
     actions: {
       initialize,
       refreshSources,
-      selectSource: (selectedSourceId) => setState((previous) => ({ ...previous, selectedSourceId, regionSelection: null })),
+      selectSource: (selectedSourceId) => setState((previous) => ({ ...previous, selectedSourceId, regionSelection: previous.captureMode === "region" ? previous.regionSelection : null })),
+      setCaptureMode: (captureMode) => setState((previous) => ({ ...previous, captureMode, regionSelection: captureMode === "region" ? previous.regionSelection : null })),
       selectRegion,
       clearRegion: () => setState((previous) => ({ ...previous, regionSelection: null })),
     startRecording,
@@ -689,6 +819,16 @@ export function useRecorder(): UseRecorderReturn {
     refreshAudioOutputs,
     setAudioOutput: (selectedAudioOutputId) => setState((previous) => ({ ...previous, selectedAudioOutputId })),
     setDevice: (currentDevice) => setState((previous) => ({ ...previous, currentDevice })),
+    setMicrophoneDevice: (currentMicrophoneDevice) => setState((previous) => ({ ...previous, currentMicrophoneDevice })),
+    setMicrophoneGain: (microphoneGain) => setState((previous) => ({ ...previous, microphoneGain: Math.min(2, Math.max(0, microphoneGain)) })),
+    setMicrophoneMuted: (microphoneMuted) => setState((previous) => ({ ...previous, microphoneMuted })),
+    setCameraShape: (cameraShape) => setState((previous) => ({ ...previous, cameraShape })),
+    setCameraPosition: (cameraPosition) => setState((previous) => ({ ...previous, cameraPosition })),
+    setCameraScale: (cameraScale) => setState((previous) => ({ ...previous, cameraScale: Math.min(0.4, Math.max(0.12, cameraScale)) })),
+    setCameraMirror: (cameraMirror) => setState((previous) => ({ ...previous, cameraMirror })),
+    setCameraOpacity: (cameraOpacity) => setState((previous) => ({ ...previous, cameraOpacity: Math.min(1, Math.max(0.2, cameraOpacity)) })),
+    setPresentationPadding: (presentationPadding) => setState((previous) => ({ ...previous, presentationPadding: Math.min(0.2, Math.max(0, presentationPadding)) })),
+    setPresentationBackground: (presentationBackground) => setState((previous) => ({ ...previous, presentationBackground })),
       setFrameRate: (frameRate) => setState((previous) => ({ ...previous, frameRate })),
       takeScreenshot,
       revealLastRecording,

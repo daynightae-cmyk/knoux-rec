@@ -62,6 +62,20 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("sourceCaptureStreamRef");
   });
 
+  it("routes studio controls through real audio, camera, and presentation compositors", () => {
+    const hook = readProjectFile("hooks/useRecorder.ts");
+    const app = readProjectFile("App.tsx");
+    expect(hook).toContain("audioContext.createGain()");
+    expect(hook).toContain("audioContext.createAnalyser()");
+    expect(hook).toContain("nativeAudioPollRef.current = setInterval");
+    expect(hook).toContain("const composePresentation");
+    expect(hook).toContain("snapshot.cameraMirror");
+    expect(hook).toContain("snapshot.cameraPosition");
+    expect(app).toContain("Audio Studio");
+    expect(app).toContain("Camera Studio");
+    expect(app).toContain("setMicrophoneGain");
+  });
+
   it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
     const main = readProjectFile("desktop/main.cjs");

@@ -33,3 +33,20 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 [dir="rtl"] .nav-button, [dir="rtl"] .source-card { text-align: start; } [dir="rtl"] .sidebar { border-right: 0; border-left: 1px solid rgba(166, 188, 255, .12); } [dir="rtl"].app-shell { grid-template-columns: 228px minmax(0, 1fr); }
 @media (max-width: 1050px) { .capture-layout { grid-template-columns: 1fr; }.control-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }.app-shell, [dir="rtl"].app-shell { grid-template-columns: 190px minmax(0, 1fr); } }
 @media (max-width: 730px) { .app-shell, [dir="rtl"].app-shell { display: block; }.sidebar { position: static; height: auto; flex-direction: row; align-items: center; gap: 12px; padding: 14px; border-right: 0; border-bottom: 1px solid rgba(166, 188, 255, .12); }.nav-list { display: flex; flex: 1; }.nav-button { padding: 9px; text-align: center; }.sidebar-foot { display: none; }.workspace { padding: 22px 14px 36px; }.topbar, .record-deck, .latest-row, .record-row { align-items: flex-start; flex-direction: column; }.topbar-actions, .record-actions { flex-wrap: wrap; }.control-stack, .settings-grid { grid-template-columns: 1fr; }.source-grid { grid-template-columns: 1fr; }.record-actions { width: 100%; }.record-button { flex: 1; }.record-row .record-actions { width: auto; }.record-deck { gap: 14px; } }
+
+/* Recording Studio controls */
+.studio-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.studio-card { display: grid; align-content: start; gap: 14px; min-height: 300px; padding: 24px; }
+.studio-card h2 { margin: 4px 0 0; font-size: 20px; letter-spacing: -.02em; }
+.studio-card label { display: grid; gap: 7px; color: #cbd8f1; font-size: 12px; font-weight: 700; }
+.studio-card select, .studio-card input[type="color"] { width: 100%; min-height: 38px; padding: 8px; border: 1px solid rgba(167, 185, 236, .15); border-radius: 8px; background: #0a1022; color: #e9efff; }
+.studio-card input[type="range"] { width: 100%; accent-color: #8c7dff; }
+.studio-card label small { color: #8294bc; font-size: 11px; font-weight: 600; }
+.inline-select { display: flex; gap: 8px; }.inline-select select { min-width: 0; flex: 1; }
+.compact { min-height: 34px; white-space: nowrap; }
+.capture-mode { max-width: 520px; margin: 0 0 18px; }.capture-mode button { flex: 1; }
+.mode-note { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid rgba(131, 114, 255, .24); border-radius: 9px; background: rgba(97, 77, 202, .12); color: #cfc9ff; font-size: 12px; }
+.meter { display: grid; gap: 7px; padding-top: 6px; }.meter-head { display: flex; align-items: center; justify-content: space-between; color: #98a8ca; font-size: 11px; }.meter-head strong { color: #dce5ff; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }.meter-rail { height: 8px; overflow: hidden; border-radius: 999px; background: rgba(100, 121, 166, .18); }.meter-rail i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #50d9ae 0%, #abc86a 60%, #ff735d 100%); transition: width .08s linear; }
+.record-info small { color: #9c91ea; font-size: 10px; }
+@media (max-width: 1050px) { .studio-grid { grid-template-columns: 1fr; } }
+@media (max-width: 730px) { .studio-grid { grid-template-columns: 1fr; }.inline-select { align-items: stretch; flex-direction: column; }.capture-mode { flex-wrap: wrap; }.capture-mode button { min-width: 30%; } }
