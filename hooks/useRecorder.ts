@@ -196,6 +196,7 @@ export function useRecorder(): UseRecorderReturn {
   const activeSessionRef = useRef<ActiveDesktopSession | null>(null);
   const pendingWriteRef = useRef<Promise<void>>(Promise.resolve());
   const terminalWriteErrorRef = useRef<Error | null>(null);
+  const sessionWarningRef = useRef<string | null>(null);
   const completionRef = useRef<Promise<void> | null>(null);
   const completeRef = useRef<(() => void) | null>(null);
   const failRef = useRef<((reason: Error) => void) | null>(null);
@@ -549,8 +550,12 @@ export function useRecorder(): UseRecorderReturn {
       if (active?.desktopSession && window.knouxRec) {
         const dimensions = stream ? getVideoDimensions(stream) : { width: null, height: null };
         if (active.nativeAudioSessionId) {
-          const nativeAudio = await window.knouxRec.audio.stopNativeSystemAudio(active.nativeAudioSessionId);
-          await window.knouxRec.recording.attachNativeAudio(active.desktopSession.id, nativeAudio);
+          try {
+            const nativeAudio = await window.knouxRec.audio.stopNativeSystemAudio(active.nativeAudioSessionId);
+            await window.knouxRec.recording.attachNativeAudio(active.desktopSession.id, nativeAudio);
+          } catch (nativeAudioError) {
+            sessionWarningRef.current = nativeAudioError instanceof Error ? `System-audio sidecar could not be finalized: ${nativeAudioError.message}` : "System-audio sidecar could not be finalized.";
+          }
         }
         const record = await window.knouxRec.recording.finishFile({
           id: active.desktopSession.id,
@@ -571,7 +576,7 @@ export function useRecorder(): UseRecorderReturn {
           status: "idle",
           recordingTime: Math.floor(record.durationMs / 1000),
           lastRecording: record,
-          error: projectMetadataError ?? terminalWriteErrorRef.current?.message ?? null,
+          error: projectMetadataError ?? terminalWriteErrorRef.current?.message ?? sessionWarningRef.current,
           bytesWritten: record.sizeBytes,
           chunksWritten: previous.chunksWritten,
         }));
@@ -640,6 +645,12 @@ export function useRecorder(): UseRecorderReturn {
         setState((previous) => ({ ...previous, nativeAudioCapture: nativeAudio }));
         nativeAudioPollRef.current = setInterval(() => {
           void window.knouxRec?.audio.getNativeSystemAudio(nativeAudio.id).then((current) => {
+            if (current?.state === "failed") {
+              sessionWarningRef.current = `System audio stopped during recording: ${current.error || "Native WASAPI capture failed."}`;
+              const liveRecorder = mediaRecorderRef.current;
+              if (liveRecorder && liveRecorder.state !== "inactive") liveRecorder.stop();
+              return;
+            }
             if (current) setState((previous) => ({ ...previous, nativeAudioCapture: current }));
           }).catch(() => undefined);
         }, 250);
@@ -660,6 +671,7 @@ export function useRecorder(): UseRecorderReturn {
     };
     pendingWriteRef.current = Promise.resolve();
     terminalWriteErrorRef.current = null;
+    sessionWarningRef.current = null;
     completionRef.current = new Promise<void>((resolve, reject) => {
       completeRef.current = resolve;
       failRef.current = reject;

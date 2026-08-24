@@ -131,6 +131,10 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("audioContext.createGain()");
     expect(hook).toContain("audioContext.createAnalyser()");
     expect(hook).toContain("nativeAudioPollRef.current = setInterval");
+    expect(hook).toContain('current?.state === "failed"');
+    expect(hook).toContain("System audio stopped during recording:");
+    expect(hook).toContain("System-audio sidecar could not be finalized:");
+    expect(hook).toContain("sessionWarningRef.current");
     expect(hook).toContain("const composePresentation");
     expect(hook).toContain("snapshot.cameraMirror");
     expect(hook).toContain("snapshot.cameraPosition");
