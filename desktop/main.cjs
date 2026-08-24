@@ -46,6 +46,7 @@ function paths() {
     settings: path.join(root, "settings.json"),
     library: path.join(root, "recordings.json"),
     projects: path.join(root, "projects"),
+    journals: path.join(root, "journals"),
   };
 }
 
@@ -53,6 +54,7 @@ function ensureDirectories() {
   const current = paths();
   fs.mkdirSync(current.recordings, { recursive: true });
   fs.mkdirSync(current.projects, { recursive: true });
+  fs.mkdirSync(current.journals, { recursive: true });
   if (!fs.existsSync(current.library)) fs.writeFileSync(current.library, "[]\n", "utf8");
 }
 
@@ -97,6 +99,29 @@ function saveLibrary(records) {
 
 function projectService() {
   return createProjectService({ projectDirectory: paths().projects });
+}
+
+function journalPath(id) {
+  return path.join(paths().journals, `${id}.json`);
+}
+
+function writeJournal(sessionRecord, state) {
+  writeJson(journalPath(sessionRecord.id), {
+    sessionId: sessionRecord.id,
+    createdAt: sessionRecord.startedAt,
+    captureSource: sessionRecord.sourceId,
+    output: sessionRecord.temporaryPath,
+    lastCompletedChunk: sessionRecord.chunksWritten,
+    bytesWritten: sessionRecord.bytesWritten,
+    audioState: sessionRecord.nativeSystemAudio ? "attached" : "none",
+    cameraState: Boolean(sessionRecord.hasCamera),
+    recordingState: state,
+  });
+}
+
+function removeJournal(id) {
+  const source = journalPath(id);
+  if (fs.existsSync(source)) fs.unlinkSync(source);
 }
 
 function assertObject(value, message) {
@@ -228,6 +253,7 @@ function installIpcHandlers() {
       bytesWritten: 0,
       chunksWritten: 0,
     });
+    writeJournal(activeSessions.get(id), "recording");
     return { id, startedAt: activeSessions.get(id).startedAt, temporaryPath };
   });
 
@@ -240,6 +266,7 @@ function installIpcHandlers() {
     fs.appendFileSync(sessionRecord.temporaryPath, Buffer.from(buffer));
     sessionRecord.bytesWritten += buffer.byteLength;
     sessionRecord.chunksWritten += 1;
+    writeJournal(sessionRecord, "recording");
   });
 
   ipcMain.handle("recording:attach-native-audio", (_event, recordingId, capture) => {
@@ -307,6 +334,7 @@ function installIpcHandlers() {
     record.projectPath = createdProject.path;
     saveLibrary([record, ...readLibrary().filter((item) => item.id !== id)]);
     activeSessions.delete(id);
+    removeJournal(id);
     return record;
   });
 
@@ -314,6 +342,7 @@ function installIpcHandlers() {
     const sessionRecord = activeSessions.get(assertString(id, "recording ID", 80));
     if (!sessionRecord) return;
     activeSessions.delete(sessionRecord.id);
+    removeJournal(sessionRecord.id);
     if (fs.existsSync(sessionRecord.temporaryPath)) fs.unlinkSync(sessionRecord.temporaryPath);
     if (typeof sessionRecord.nativeSystemAudio?.filePath === "string" && fs.existsSync(sessionRecord.nativeSystemAudio.filePath)) {
       fs.unlinkSync(sessionRecord.nativeSystemAudio.filePath);
@@ -515,9 +544,9 @@ app.on("before-quit", () => {
   globalShortcut.unregisterAll();
   for (const sessionRecord of activeSessions.values()) {
     try {
-      if (fs.existsSync(sessionRecord.temporaryPath)) fs.unlinkSync(sessionRecord.temporaryPath);
+      writeJournal(sessionRecord, "interrupted");
     } catch {
-      // Best-effort cleanup only; unfinished parts remain recoverable for forensic inspection.
+      // A failed journal write must not block process shutdown; the partial file remains intact.
     }
   }
 });

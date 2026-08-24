@@ -62,6 +62,15 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("sourceCaptureStreamRef");
   });
 
+  it("writes a durable recording journal and preserves interrupted parts at shutdown", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    expect(main).toContain("function writeJournal");
+    expect(main).toContain("lastCompletedChunk");
+    expect(main).toContain("writeJournal(sessionRecord, \"recording\")");
+    expect(main).toContain("writeJournal(sessionRecord, \"interrupted\")");
+    expect(main).toContain("removeJournal(id)");
+  });
+
   it("creates versioned non-destructive recording projects through narrow IPC", () => {
     const main = readProjectFile("desktop/main.cjs");
     const preload = readProjectFile("desktop/preload.cjs");
