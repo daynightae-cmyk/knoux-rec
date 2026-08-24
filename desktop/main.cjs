@@ -27,6 +27,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: "knoux-rec-media", privileges: {
 
 const isDevelopment = !app.isPackaged;
 const MAX_CHUNK_BYTES = 128 * 1024 * 1024;
+const MIN_FREE_RECORDING_BYTES = 512 * 1024 * 1024;
 const DEFAULT_SETTINGS = Object.freeze({
   locale: "en",
   defaultFrameRate: 30,
@@ -94,6 +95,21 @@ function saveSettings(nextSettings) {
   return nextSettings;
 }
 
+function availableBytes(directory) {
+  if (typeof fs.statfsSync !== "function") return null;
+  const stats = fs.statfsSync(directory);
+  return Number(stats.bavail) * Number(stats.bsize);
+}
+
+function assertRecordingDirectoryReady(directory, label) {
+  fs.mkdirSync(directory, { recursive: true });
+  fs.accessSync(directory, fs.constants.W_OK);
+  const freeBytes = availableBytes(directory);
+  if (freeBytes !== null && freeBytes < MIN_FREE_RECORDING_BYTES) {
+    throw new Error(label + " has less than 512 MiB available. Free disk space before recording.");
+  }
+  return freeBytes;
+}
 function readLibrary() {
   const records = readJson(paths().library, []);
   return Array.isArray(records) ? records.filter((record) => record && typeof record.id === "string") : [];
@@ -292,6 +308,8 @@ function installIpcHandlers() {
     const sourceId = value.sourceId === null ? null : assertString(value.sourceId, "source ID", 300);
     const width = assertNullableNumber(value.width, "width");
     const height = assertNullableNumber(value.height, "height");
+    assertRecordingDirectoryReady(paths().recordings, "Temporary recording storage");
+    assertRecordingDirectoryReady(getSettings().recordingDirectory, "Recording folder");
 
     const id = crypto.randomUUID();
     const temporaryPath = path.join(paths().root, "recordings", `${id}.part`);

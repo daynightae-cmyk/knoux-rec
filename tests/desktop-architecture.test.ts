@@ -34,6 +34,14 @@ describe("KNOuX REC desktop architecture", () => {
     expect(main).toContain("No media data was written for this recording.");
   });
 
+  it("guards recording starts against low disk space and unwritable destinations", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    expect(main).toContain("MIN_FREE_RECORDING_BYTES = 512 * 1024 * 1024");
+    expect(main).toContain("function assertRecordingDirectoryReady");
+    expect(main).toContain("Temporary recording storage");
+    expect(main).toContain("Recording folder");
+    expect(main).toContain("Free disk space before recording.");
+  });
   it("uses a bounded native WASAPI helper and does not accept an empty sidecar WAV", () => {
     const helper = readProjectFile("desktop/audio-helper/Program.cs");
     const service = readProjectFile("desktop/native-audio.cjs");
