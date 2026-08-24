@@ -105,6 +105,8 @@ describe("KNOuX REC desktop architecture", () => {
     expect(mediaBackend).toContain("mpeg4");
     expect(packageJson).toContain("test:export");
     expect(packageJson).toContain("export-runtime-smoke.cjs");
+    expect(readProjectFile("desktop/main.cjs")).toContain("project:export");
+    expect(readProjectFile("desktop/preload.cjs")).toContain("project:export");
   });
 
   it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {

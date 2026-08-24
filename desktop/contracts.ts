@@ -189,6 +189,7 @@ export interface RecorderDesktopApi {
   project: {
     get: (recordingId: string) => Promise<KnouxProject | null>;
     save: (project: KnouxProject) => Promise<KnouxProject>;
+    export: (input: { recordingId: string; startMs?: number; endMs?: number; format?: "mp4" | "webm" }) => Promise<{ outputPath: string; media: MediaProbe }>;
   };
   recording: {
     startFile: (input: StartRecordingFileInput) => Promise<RecordingSession>;

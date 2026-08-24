@@ -13,7 +13,7 @@ const {
 } = require("electron");
 const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
-const { detectEncoders, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
+const { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
 const { createProjectService } = require("./project-service.cjs");
 const fs = require("node:fs");
@@ -222,6 +222,18 @@ function installIpcHandlers() {
 
   ipcMain.handle("project:get", (_event, recordingId) => projectService().get(assertString(recordingId, "recording ID", 80)));
   ipcMain.handle("project:save", (_event, project) => projectService().save(project));
+  ipcMain.handle("project:export", async (_event, input) => {
+    const value = assertObject(input, "Invalid export request.");
+    const recordingId = assertString(value.recordingId, "recording ID", 80);
+    const project = projectService().get(recordingId);
+    if (!project) throw new Error("Project was not found.");
+    const format = value.format === "webm" ? "webm" : "mp4";
+    const startMs = Number.isFinite(value.startMs) ? value.startMs : 0;
+    const endMs = Number.isFinite(value.endMs) ? value.endMs : null;
+    const exportDirectory = path.join(paths().root, "exports");
+    fs.mkdirSync(exportDirectory, { recursive: true });
+    return exportProjectClip({ inputPath: project.media.videoPath, outputPath: path.join(exportDirectory, `${recordingId}-${Date.now()}`), startMs, endMs, format });
+  });
 
   ipcMain.handle("recording:start-file", (_event, input) => {
     const value = assertObject(input, "Invalid recording metadata.");
