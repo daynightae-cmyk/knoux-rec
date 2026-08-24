@@ -66,9 +66,29 @@ describe("KNOuX REC desktop architecture", () => {
     const main = readProjectFile("desktop/main.cjs");
     expect(main).toContain("function writeJournal");
     expect(main).toContain("lastCompletedChunk");
+    expect(main).toContain("nativeSystemAudioPath");
     expect(main).toContain("writeJournal(sessionRecord, \"recording\")");
     expect(main).toContain("writeJournal(sessionRecord, \"interrupted\")");
     expect(main).toContain("removeJournal(id)");
+  });
+
+  it("exposes constrained inspection and safe recovery for interrupted media parts", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    const preload = readProjectFile("desktop/preload.cjs");
+    const recovery = readProjectFile("desktop/recovery-service.cjs");
+    const app = readProjectFile("App.tsx");
+    const packageJson = readProjectFile("package.json");
+    expect(main).toContain("recovery:list");
+    expect(main).toContain("recovery:recover");
+    expect(main).toContain("recovery:discard");
+    expect(preload).toContain("recovery:recover");
+    expect(recovery).toContain("WASAPI sidecar recovery is unavailable");
+    expect(recovery).toContain("FFprobe could not verify a video stream");
+    expect(recovery).toContain("isPathInside");
+    expect(app).toContain("window.knouxRec.recovery.recover(id)");
+    expect(app).toContain("recoveryHint");
+    expect(packageJson).toContain("test:recovery");
+    expect(packageJson).toContain("recovery-runtime-smoke.cjs");
   });
 
   it("creates versioned non-destructive recording projects through narrow IPC", () => {

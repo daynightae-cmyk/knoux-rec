@@ -161,6 +161,19 @@ export interface RecorderSettings {
   openLibraryAfterSave: boolean;
 }
 
+export interface RecoverySession {
+  id: string;
+  createdAt: string | null;
+  recordingState: string;
+  sourceId: string | null;
+  bytesWritten: number;
+  chunksWritten: number;
+  partBytes: number;
+  hasNativeSystemAudio: boolean;
+  recoverable: boolean;
+  reason: string | null;
+}
+
 export interface RecorderHealth {
   recordingDirectory: string;
   freeBytes: number | null;
@@ -185,6 +198,11 @@ export interface RecorderDesktopApi {
     startNativeSystemAudio: (deviceId: string | null) => Promise<NativeAudioCapture>;
     stopNativeSystemAudio: (id: string) => Promise<NativeAudioCapture>;
     getNativeSystemAudio: (id: string) => Promise<NativeAudioCapture | null>;
+  };
+  recovery: {
+    list: () => Promise<RecoverySession[]>;
+    recover: (sessionId: string) => Promise<RecordingRecord>;
+    discard: (sessionId: string) => Promise<void>;
   };
   project: {
     get: (recordingId: string) => Promise<KnouxProject | null>;

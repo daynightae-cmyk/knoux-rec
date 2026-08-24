@@ -18,6 +18,7 @@ const { createNativeAudioService } = require("./native-audio.cjs");
 const { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
 const { createProjectService, getContinuousTrim } = require("./project-service.cjs");
+const { createRecoveryService } = require("./recovery-service.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -106,6 +107,18 @@ function projectService() {
   return createProjectService({ projectDirectory: paths().projects });
 }
 
+function recoveryService() {
+  return createRecoveryService({
+    journalDirectory: paths().journals,
+    partDirectory: paths().recordings,
+    recordingDirectory: getSettings().recordingDirectory,
+    readLibrary,
+    saveLibrary,
+    createProject: (record) => projectService().createFromRecording(record),
+    probeMedia,
+  });
+}
+
 function registerMediaProtocol() {
   protocol.handle("knoux-rec-media", (request) => {
     const requestUrl = new URL(request.url);
@@ -132,6 +145,14 @@ function writeJournal(sessionRecord, state) {
     bytesWritten: sessionRecord.bytesWritten,
     audioState: sessionRecord.nativeSystemAudio ? "attached" : "none",
     cameraState: Boolean(sessionRecord.hasCamera),
+    suggestedName: sessionRecord.suggestedName,
+    mimeType: sessionRecord.mimeType,
+    hasSystemAudio: sessionRecord.hasSystemAudio,
+    hasMicrophone: sessionRecord.hasMicrophone,
+    frameRate: sessionRecord.frameRate,
+    width: sessionRecord.width,
+    height: sessionRecord.height,
+    nativeSystemAudioPath: sessionRecord.nativeSystemAudio?.filePath || null,
     recordingState: state,
   });
 }
@@ -237,6 +258,10 @@ function installIpcHandlers() {
   ipcMain.handle("audio:stop-native-system", async (_event, id) => nativeAudio.stop(assertString(id, "native audio ID", 80)));
   ipcMain.handle("audio:get-native-system", (_event, id) => nativeAudio.get(assertString(id, "native audio ID", 80)));
 
+  ipcMain.handle("recovery:list", () => recoveryService().list());
+  ipcMain.handle("recovery:recover", (_event, sessionId) => recoveryService().recover(assertString(sessionId, "recovery session ID", 80)));
+  ipcMain.handle("recovery:discard", (_event, sessionId) => recoveryService().discard(assertString(sessionId, "recovery session ID", 80)));
+
   ipcMain.handle("project:get", (_event, recordingId) => projectService().get(assertString(recordingId, "recording ID", 80)));
   ipcMain.handle("project:save", (_event, project) => projectService().save(project));
   ipcMain.handle("project:export-srt", (_event, recordingId) => {
@@ -313,6 +338,7 @@ function installIpcHandlers() {
     if (fileBytes <= 44) throw new Error("Native audio sidecar contains no PCM data.");
     sessionRecord.nativeSystemAudio = { ...value, fileBytes };
     sessionRecord.hasSystemAudio = true;
+    writeJournal(sessionRecord, "recording");
   });
 
   ipcMain.handle("recording:finish-file", async (_event, input) => {

@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld("knouxRec", {
     stopNativeSystemAudio: (id) => invoke("audio:stop-native-system", id),
     getNativeSystemAudio: (id) => invoke("audio:get-native-system", id),
   },
+  recovery: {
+    list: () => invoke("recovery:list"),
+    recover: (sessionId) => invoke("recovery:recover", sessionId),
+    discard: (sessionId) => invoke("recovery:discard", sessionId),
+  },
   project: {
     get: (recordingId) => invoke("project:get", recordingId),
     save: (project) => invoke("project:save", project),

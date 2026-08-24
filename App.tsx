@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KnouxProject, RecorderHealth, RecordingRecord } from "./desktop/contracts";
+import type { KnouxProject, RecorderHealth, RecordingRecord, RecoverySession } from "./desktop/contracts";
 import ProjectWorkspace, { cloneProject, type ProjectWorkspacePanel } from "./components/ProjectWorkspace";
 import { useRecorder, type CameraPipPosition, type CameraPipShape, type CaptureMode } from "./hooks/useRecorder";
 
@@ -19,7 +19,7 @@ const copy = {
     presentation: "Presentation canvas", padding: "Padding", background: "Background", presentationNote: "Enabled canvas framing is composited before encoding, so the final recording matches these controls.",
     last: "Latest recording", noRecording: "No recording has been finalized in this session.", open: "Open", reveal: "Show in folder", delete: "Delete", exportMp4: "Export MP4", exported: "MP4 export completed locally and was verified.", recordings: "Saved recordings", load: "Refresh library", emptyLibrary: "Your finalized local recordings will appear here.", created: "Created", duration: "Duration", sizeLabel: "Size", muxed: "System audio muxed", sidecar: "System WAV source retained",
     desktopStorage: "Local storage", folder: "Recording folder", chooseFolder: "Change folder", available: "Available", unavailable: "Unavailable", writable: "Writable", yes: "Yes", no: "No", language: "Language", english: "English", arabic: "العربية", globalShortcut: "Global shortcut", shortcutValue: "Ctrl + Shift + R",
-    error: "Recorder error", dismiss: "Dismiss", desktopRequired: "Desktop capture sources are available in the KNOuX REC Windows application.", media: "Local media runtime", verified: "Verified", unavailableRuntime: "Unavailable",
+    error: "Recorder error", dismiss: "Dismiss", desktopRequired: "Desktop capture sources are available in the KNOuX REC Windows application.", media: "Local media runtime", verified: "Verified", unavailableRuntime: "Unavailable", recovery: "Interrupted sessions", recoveryHint: "Only verified media parts without a WASAPI sidecar can be recovered.", noRecovery: "No interrupted sessions were found.", recover: "Recover", discard: "Discard", preserved: "Preserved", blocked: "Recovery unavailable", recovered: "Interrupted recording recovered locally.", discarded: "Interrupted session discarded.",
   },
   ar: {
     capture: "الالتقاط", library: "المكتبة", editor: "المحرر", captions: "التسميات", export: "التصدير", audio: "استديو الصوت", camera: "استديو الكاميرا", settings: "الإعدادات",
@@ -33,7 +33,7 @@ const copy = {
     presentation: "لوحة العرض", padding: "الحشوة", background: "الخلفية", presentationNote: "يُركب إطار اللوحة المفعّل قبل الترميز، لذا يطابق التسجيل النهائي هذه العناصر.",
     last: "أحدث تسجيل", noRecording: "لم يتم إنهاء أي تسجيل في هذه الجلسة.", open: "فتح", reveal: "إظهار في المجلد", delete: "حذف", exportMp4: "تصدير MP4", exported: "اكتمل تصدير MP4 محلياً وتم التحقق منه.", recordings: "التسجيلات المحفوظة", load: "تحديث المكتبة", emptyLibrary: "ستظهر هنا تسجيلاتك المحلية التي تم إنهاؤها.", created: "تاريخ الإنشاء", duration: "المدة", sizeLabel: "الحجم", muxed: "تم دمج صوت النظام", sidecar: "تم الاحتفاظ بمصدر WAV للنظام",
     desktopStorage: "التخزين المحلي", folder: "مجلد التسجيلات", chooseFolder: "تغيير المجلد", available: "المتاح", unavailable: "غير متاح", writable: "قابل للكتابة", yes: "نعم", no: "لا", language: "اللغة", english: "English", arabic: "العربية", globalShortcut: "الاختصار العام", shortcutValue: "Ctrl + Shift + R",
-    error: "خطأ في المسجل", dismiss: "إغلاق", desktopRequired: "تظهر مصادر سطح المكتب داخل تطبيق KNOuX REC على Windows.", media: "محرك الوسائط المحلي", verified: "تم التحقق", unavailableRuntime: "غير متاح",
+    error: "خطأ في المسجل", dismiss: "إغلاق", desktopRequired: "تظهر مصادر سطح المكتب داخل تطبيق KNOuX REC على Windows.", media: "محرك الوسائط المحلي", verified: "تم التحقق", unavailableRuntime: "غير متاح", recovery: "جلسات غير مكتملة", recoveryHint: "لا يمكن استعادة إلا أجزاء الوسائط المتحقق منها التي لا تملك sidecar لـ WASAPI.", noRecovery: "لم تُعثر على جلسات غير مكتملة.", recover: "استعادة", discard: "حذف", preserved: "محفوظ", blocked: "الاستعادة غير متاحة", recovered: "تمت استعادة التسجيل غير المكتمل محلياً.", discarded: "تم حذف الجلسة غير المكتملة.",
   },
 } as const;
 
@@ -81,6 +81,9 @@ export default function App() {
   const [locale, setLocale] = useState<Locale>("en");
   const [health, setHealth] = useState<RecorderHealth | null>(null);
   const [records, setRecords] = useState<RecordingRecord[]>([]);
+  const [recoverySessions, setRecoverySessions] = useState<RecoverySession[]>([]);
+  const [recoveryBusyId, setRecoveryBusyId] = useState<string | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [mediaAvailable, setMediaAvailable] = useState<boolean | null>(null);
   const [selectedProjectRecordingId, setSelectedProjectRecordingId] = useState<string | null>(null);
@@ -105,14 +108,18 @@ export default function App() {
     if (!window.knouxRec) return;
     setRecords(await window.knouxRec.recording.list());
   }, []);
+  const loadRecovery = useCallback(async () => {
+    if (!window.knouxRec) return;
+    setRecoverySessions(await window.knouxRec.recovery.list());
+  }, []);
 
   useEffect(() => {
     if (!window.knouxRec) return;
-    void Promise.all([window.knouxRec.settings.get(), loadHealth(), loadLibrary(), window.knouxRec.media.getRuntimeStatus()]).then(([settings, , , runtime]) => {
+    void Promise.all([window.knouxRec.settings.get(), loadHealth(), loadLibrary(), loadRecovery(), window.knouxRec.media.getRuntimeStatus()]).then(([settings, , , , runtime]) => {
       setLocale(settings.locale);
       setMediaAvailable(runtime.available);
     });
-  }, [loadHealth, loadLibrary]);
+  }, [loadHealth, loadLibrary, loadRecovery]);
   useEffect(() => { if (state.lastRecording) void loadLibrary(); }, [loadLibrary, state.lastRecording]);
 
   const updateLocale = async (nextLocale: Locale) => {
@@ -133,6 +140,34 @@ export default function App() {
   };
   const changeFolder = async () => { if (window.knouxRec && await window.knouxRec.system.chooseRecordingDirectory()) await loadHealth(); };
   const deleteRecord = async (id: string) => { if (window.knouxRec) { await window.knouxRec.recording.remove(id); await loadLibrary(); } };
+  const recoverSession = async (id: string) => {
+    if (!window.knouxRec) return;
+    setRecoveryBusyId(id);
+    setRecoveryError(null);
+    try {
+      await window.knouxRec.recovery.recover(id);
+      await Promise.all([loadRecovery(), loadLibrary()]);
+      setNotice(t.recovered);
+    } catch (reason) {
+      setRecoveryError(reason instanceof Error ? reason.message : "Recovery failed.");
+    } finally {
+      setRecoveryBusyId(null);
+    }
+  };
+  const discardRecovery = async (id: string) => {
+    if (!window.knouxRec) return;
+    setRecoveryBusyId(id);
+    setRecoveryError(null);
+    try {
+      await window.knouxRec.recovery.discard(id);
+      await loadRecovery();
+      setNotice(t.discarded);
+    } catch (reason) {
+      setRecoveryError(reason instanceof Error ? reason.message : "Discard failed.");
+    } finally {
+      setRecoveryBusyId(null);
+    }
+  };
   const exportRecord = async (id: string) => { if (!window.knouxRec) return; await window.knouxRec.project.export({ recordingId: id, format: "mp4" }); setNotice(t.exported); };
   const selectMode = async (mode: CaptureMode) => {
     actions.setCaptureMode(mode);
@@ -270,7 +305,7 @@ export default function App() {
 
       {(panel === "editor" || panel === "captions" || panel === "export") && <ProjectWorkspace panel={panel} locale={locale} records={records} selectedRecordingId={selectedProjectRecordingId} project={project} loading={projectLoading} saving={projectSaving} dirty={projectHistoryIndex !== 0} error={projectError} canUndo={projectHistoryIndex > 0} canRedo={projectHistoryIndex < projectHistory.length - 1} onSelectRecording={(recordingId) => void loadProject(recordingId)} onChange={updateProject} onSave={() => void saveProject()} onUndo={undoProject} onRedo={redoProject} />}
 
-      {panel === "settings" && <div className="settings-grid"><section className="card"><p className="eyebrow">PREFERENCES</p><h2>{t.language}</h2><div className="segmented"><button className={locale === "en" ? "active" : ""} onClick={() => void updateLocale("en")}>{t.english}</button><button className={locale === "ar" ? "active" : ""} onClick={() => void updateLocale("ar")}>{t.arabic}</button></div><h3>{t.media}</h3><p className="muted">{mediaAvailable ? t.verified : t.unavailableRuntime}</p></section><section className="card"><p className="eyebrow">{t.desktopStorage}</p><h2>{t.folder}</h2>{health ? <div className="storage-details"><code>{health.recordingDirectory}</code><div><span>{t.writable}</span><strong>{health.writable ? t.yes : t.no}</strong></div><div><span>{t.available}</span><strong>{formatBytes(health.freeBytes)}</strong></div></div> : <p className="muted">{t.unavailable}</p>}<button className="secondary-button" disabled={!state.isDesktop} onClick={() => void changeFolder()}>{t.chooseFolder}</button></section></div>}
+      {panel === "settings" && <div className="settings-grid"><section className="card"><p className="eyebrow">PREFERENCES</p><h2>{t.language}</h2><div className="segmented"><button className={locale === "en" ? "active" : ""} onClick={() => void updateLocale("en")}>{t.english}</button><button className={locale === "ar" ? "active" : ""} onClick={() => void updateLocale("ar")}>{t.arabic}</button></div><h3>{t.media}</h3><p className="muted">{mediaAvailable ? t.verified : t.unavailableRuntime}</p></section><section className="card"><p className="eyebrow">{t.desktopStorage}</p><h2>{t.folder}</h2>{health ? <div className="storage-details"><code>{health.recordingDirectory}</code><div><span>{t.writable}</span><strong>{health.writable ? t.yes : t.no}</strong></div><div><span>{t.available}</span><strong>{formatBytes(health.freeBytes)}</strong></div></div> : <p className="muted">{t.unavailable}</p>}<button className="secondary-button" disabled={!state.isDesktop} onClick={() => void changeFolder()}>{t.chooseFolder}</button></section><section className="card recovery-card"><div className="section-heading"><div><p className="eyebrow">RECOVERY</p><h2>{t.recovery}</h2><p>{t.recoveryHint}</p></div><button className="secondary-button" disabled={!state.isDesktop || recoveryBusyId !== null} onClick={() => void loadRecovery()}>{t.refresh}</button></div>{recoverySessions.length ? <div className="recovery-list">{recoverySessions.map((item) => <article className="recovery-row" key={item.id}><div><strong>{formatDate(item.createdAt || new Date().toISOString(), locale)}</strong><span>{formatBytes(item.partBytes)} · {item.chunksWritten} chunks · {item.recoverable ? t.preserved : t.blocked}</span>{item.reason && <small>{item.reason}</small>}</div><div className="record-actions">{item.recoverable && <button className="secondary-button" disabled={recoveryBusyId !== null} onClick={() => void recoverSession(item.id)}>{t.recover}</button>}<button className="danger-button" disabled={recoveryBusyId !== null} onClick={() => void discardRecovery(item.id)}>{t.discard}</button></div></article>)}</div> : <div className="empty-recovery">{t.noRecovery}</div>}{recoveryError && <p className="export-error">{recoveryError}</p>}</section></div>}
     </section>
   </main>;
 }
