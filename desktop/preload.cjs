@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("knouxRec", {
     get: (recordingId) => invoke("project:get", recordingId),
     save: (project) => invoke("project:save", project),
     export: (input) => invoke("project:export", input),
+    exportSrt: (recordingId) => invoke("project:export-srt", recordingId),
   },
   recording: {
     startFile: (input) => invoke("recording:start-file", input),

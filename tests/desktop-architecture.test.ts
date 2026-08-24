@@ -97,6 +97,15 @@ describe("KNOuX REC desktop architecture", () => {
     expect(app).toContain("setMicrophoneGain");
   });
 
+  it("exports SRT only from real caption segments in a versioned project", () => {
+    const projects = readProjectFile("desktop/project-service.cjs");
+    const main = readProjectFile("desktop/main.cjs");
+    expect(projects).toContain("function formatSrt");
+    expect(projects).toContain("Project has no caption segments to export.");
+    expect(projects).toContain(".srt");
+    expect(main).toContain("project:export-srt");
+  });
+
   it("keeps the project export path constrained and covered by a runtime MP4 smoke test", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
     const packageJson = readProjectFile("package.json");

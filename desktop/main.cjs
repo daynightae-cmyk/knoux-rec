@@ -222,6 +222,10 @@ function installIpcHandlers() {
 
   ipcMain.handle("project:get", (_event, recordingId) => projectService().get(assertString(recordingId, "recording ID", 80)));
   ipcMain.handle("project:save", (_event, project) => projectService().save(project));
+  ipcMain.handle("project:export-srt", (_event, recordingId) => {
+    const id = assertString(recordingId, "recording ID", 80);
+    return projectService().exportSrt(id, path.join(paths().root, "exports"));
+  });
   ipcMain.handle("project:export", async (_event, input) => {
     const value = assertObject(input, "Invalid export request.");
     const recordingId = assertString(value.recordingId, "recording ID", 80);

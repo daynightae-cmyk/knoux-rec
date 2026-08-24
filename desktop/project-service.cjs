@@ -52,6 +52,19 @@ function validateProject(value) {
   return project;
 }
 
+function toSrtTimestamp(milliseconds) {
+  const total = Math.floor(milliseconds);
+  const hours = Math.floor(total / 3_600_000);
+  const minutes = Math.floor((total % 3_600_000) / 60_000);
+  const seconds = Math.floor((total % 60_000) / 1000);
+  const millis = total % 1000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
+}
+
+function formatSrt(project) {
+  return project.captions.segments.map((segment, index) => `${index + 1}\n${toSrtTimestamp(segment.startMs)} --> ${toSrtTimestamp(segment.endMs)}\n${segment.text.replace(/\r?\n/g, "\n")}\n`).join("\n");
+}
+
 function createProjectService({ projectDirectory }) {
   fs.mkdirSync(projectDirectory, { recursive: true });
   const projectPath = (id) => path.join(projectDirectory, `${id}.knouxrec`);
@@ -72,6 +85,17 @@ function createProjectService({ projectDirectory }) {
       atomicJsonWrite(projectPath(project.id), project);
       return project;
     },
+    exportSrt(id, outputDirectory) {
+      const project = this.get(id);
+      if (!project) throw new Error("Project was not found.");
+      if (!project.captions.segments.length) throw new Error("Project has no caption segments to export.");
+      fs.mkdirSync(outputDirectory, { recursive: true });
+      const destination = path.join(outputDirectory, `${project.id}.srt`);
+      const temporary = `${destination}.tmp`;
+      fs.writeFileSync(temporary, `${formatSrt(project)}\n`, "utf8");
+      fs.renameSync(temporary, destination);
+      return destination;
+    },
     remove(id) {
       const source = projectPath(assertString(id, "project ID", 80));
       if (fs.existsSync(source)) fs.unlinkSync(source);
@@ -79,4 +103,4 @@ function createProjectService({ projectDirectory }) {
   };
 }
 
-module.exports = { createProjectService };
+module.exports = { createProjectService, formatSrt };
