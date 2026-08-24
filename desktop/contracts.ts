@@ -137,6 +137,19 @@ export interface RecordingRecord {
   nativeSystemAudio: NativeAudioCapture | null;
   systemAudioMuxed: boolean;
   media: MediaProbe | null;
+  projectPath: string | null;
+}
+
+export interface KnouxProject {
+  schemaVersion: 1;
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  media: { videoPath: string; systemAudioPath: string | null };
+  timeline: { durationMs: number; cuts: Array<{ id: string; startMs: number; endMs: number }> };
+  presentation: { padding: number; background: string };
+  camera: { enabled: boolean; shape: string; position: string; scale: number; mirror: boolean; opacity: number };
+  captions: { language: string | null; segments: Array<{ id: string; startMs: number; endMs: number; text: string }> };
 }
 
 export interface RecorderSettings {
@@ -172,6 +185,10 @@ export interface RecorderDesktopApi {
     startNativeSystemAudio: (deviceId: string | null) => Promise<NativeAudioCapture>;
     stopNativeSystemAudio: (id: string) => Promise<NativeAudioCapture>;
     getNativeSystemAudio: (id: string) => Promise<NativeAudioCapture | null>;
+  };
+  project: {
+    get: (recordingId: string) => Promise<KnouxProject | null>;
+    save: (project: KnouxProject) => Promise<KnouxProject>;
   };
   recording: {
     startFile: (input: StartRecordingFileInput) => Promise<RecordingSession>;

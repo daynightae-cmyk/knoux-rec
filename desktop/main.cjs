@@ -15,6 +15,7 @@ const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
 const { detectEncoders, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
+const { createProjectService } = require("./project-service.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -44,12 +45,14 @@ function paths() {
     recordings: path.join(root, "recordings"),
     settings: path.join(root, "settings.json"),
     library: path.join(root, "recordings.json"),
+    projects: path.join(root, "projects"),
   };
 }
 
 function ensureDirectories() {
   const current = paths();
   fs.mkdirSync(current.recordings, { recursive: true });
+  fs.mkdirSync(current.projects, { recursive: true });
   if (!fs.existsSync(current.library)) fs.writeFileSync(current.library, "[]\n", "utf8");
 }
 
@@ -90,6 +93,10 @@ function readLibrary() {
 
 function saveLibrary(records) {
   writeJson(paths().library, records);
+}
+
+function projectService() {
+  return createProjectService({ projectDirectory: paths().projects });
 }
 
 function assertObject(value, message) {
@@ -187,6 +194,9 @@ function installIpcHandlers() {
   ipcMain.handle("audio:start-native-system", (_event, deviceId) => nativeAudio.start(deviceId ?? null, getSettings().recordingDirectory));
   ipcMain.handle("audio:stop-native-system", async (_event, id) => nativeAudio.stop(assertString(id, "native audio ID", 80)));
   ipcMain.handle("audio:get-native-system", (_event, id) => nativeAudio.get(assertString(id, "native audio ID", 80)));
+
+  ipcMain.handle("project:get", (_event, recordingId) => projectService().get(assertString(recordingId, "recording ID", 80)));
+  ipcMain.handle("project:save", (_event, project) => projectService().save(project));
 
   ipcMain.handle("recording:start-file", (_event, input) => {
     const value = assertObject(input, "Invalid recording metadata.");
@@ -291,7 +301,10 @@ function installIpcHandlers() {
       nativeSystemAudio: sessionRecord.nativeSystemAudio || null,
       systemAudioMuxed,
       media,
+      projectPath: null,
     };
+    const createdProject = projectService().createFromRecording(record);
+    record.projectPath = createdProject.path;
     saveLibrary([record, ...readLibrary().filter((item) => item.id !== id)]);
     activeSessions.delete(id);
     return record;
@@ -354,6 +367,7 @@ function installIpcHandlers() {
     if (typeof record.nativeSystemAudio?.filePath === "string" && fs.existsSync(record.nativeSystemAudio.filePath)) {
       fs.unlinkSync(record.nativeSystemAudio.filePath);
     }
+    projectService().remove(recordingId);
     saveLibrary(records.filter((item) => item.id !== recordingId));
   });
 

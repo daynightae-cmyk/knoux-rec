@@ -62,6 +62,18 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("sourceCaptureStreamRef");
   });
 
+  it("creates versioned non-destructive recording projects through narrow IPC", () => {
+    const main = readProjectFile("desktop/main.cjs");
+    const preload = readProjectFile("desktop/preload.cjs");
+    const projects = readProjectFile("desktop/project-service.cjs");
+    expect(main).toContain("project:get");
+    expect(main).toContain("createFromRecording(record)");
+    expect(preload).toContain("project:save");
+    expect(projects).toContain("schemaVersion: 1");
+    expect(projects).toContain(".knouxrec");
+    expect(projects).toContain("atomicJsonWrite");
+  });
+
   it("routes studio controls through real audio, camera, and presentation compositors", () => {
     const hook = readProjectFile("hooks/useRecorder.ts");
     const app = readProjectFile("App.tsx");
