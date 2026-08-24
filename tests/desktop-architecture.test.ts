@@ -92,6 +92,9 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("const composePresentation");
     expect(hook).toContain("snapshot.cameraMirror");
     expect(hook).toContain("snapshot.cameraPosition");
+    expect(hook).toContain("projectPresentation: { padding: snapshot.presentationPadding");
+    expect(hook).toContain("projectCamera: { enabled: snapshot.includeCamera");
+    expect(hook).toContain("project.save({ ...project, presentation: active.projectPresentation, camera: active.projectCamera })");
     expect(app).toContain("Audio Studio");
     expect(app).toContain("Camera Studio");
     expect(app).toContain("setMicrophoneGain");
@@ -108,14 +111,34 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("keeps the project export path constrained and covered by a runtime MP4 smoke test", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
+    const main = readProjectFile("desktop/main.cjs");
+    const projects = readProjectFile("desktop/project-service.cjs");
     const packageJson = readProjectFile("package.json");
     expect(mediaBackend).toContain("async function exportProjectClip");
     expect(mediaBackend).toContain("FFmpeg export");
     expect(mediaBackend).toContain("mpeg4");
     expect(packageJson).toContain("test:export");
     expect(packageJson).toContain("export-runtime-smoke.cjs");
-    expect(readProjectFile("desktop/main.cjs")).toContain("project:export");
+    expect(main).toContain("project:export");
+    expect(main).toContain("getContinuousTrim(project)");
+    expect(main).toContain("startMs: range.startMs");
+    expect(main).not.toContain("value.startMs");
+    expect(projects).toContain("Only one continuous trim range is supported.");
     expect(readProjectFile("desktop/preload.cjs")).toContain("project:export");
+  });
+
+  it("provides project-backed editor and caption controls instead of placeholder pages", () => {
+    const app = readProjectFile("App.tsx");
+    const workspace = readProjectFile("components/ProjectWorkspace.tsx");
+    expect(app).toContain('"editor" | "captions" | "export"');
+    expect(app).toContain("<ProjectWorkspace");
+    expect(app).toContain("window.knouxRec.project.save(project)");
+    expect(workspace).toContain("window.knouxRec.project.exportSrt(selectedRecordingId)");
+    expect(workspace).toContain("window.knouxRec.project.export({ recordingId: selectedRecordingId, format: \"mp4\" })");
+    expect(workspace).toContain("Automatic transcription is unavailable in this build.");
+    expect(workspace).toContain("knoux-rec-media://recording/");
+    expect(readProjectFile("desktop/main.cjs")).toContain("protocol.handle(\"knoux-rec-media\"");
+    expect(readProjectFile("desktop/main.cjs")).toContain("pathToFileURL(record.filePath)");
   });
 
   it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {

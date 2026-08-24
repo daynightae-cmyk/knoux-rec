@@ -103,6 +103,8 @@ interface ActiveDesktopSession {
   desktopSession: RecordingSession | null;
   nativeAudioSessionId: string | null;
   fallbackChunks: Blob[];
+  projectPresentation: { padding: number; background: string };
+  projectCamera: { enabled: boolean; shape: CameraPipShape; position: CameraPipPosition; scale: number; mirror: boolean; opacity: number };
 }
 
 function chooseMimeType(): string | undefined {
@@ -555,12 +557,20 @@ export function useRecorder(): UseRecorderReturn {
           frameCount: null,
           droppedFrames: null,
         });
+        let projectMetadataError: string | null = null;
+        try {
+          const project = await window.knouxRec.project.get(record.id);
+          if (!project) throw new Error("The recording project was not created.");
+          await window.knouxRec.project.save({ ...project, presentation: active.projectPresentation, camera: active.projectCamera });
+        } catch (projectError) {
+          projectMetadataError = projectError instanceof Error ? `Recording completed, but project metadata was not saved: ${projectError.message}` : "Recording completed, but project metadata was not saved.";
+        }
         setState((previous) => ({
           ...previous,
           status: "idle",
           recordingTime: Math.floor(record.durationMs / 1000),
           lastRecording: record,
-          error: null,
+          error: projectMetadataError,
           bytesWritten: record.sizeBytes,
           chunksWritten: previous.chunksWritten,
         }));
@@ -640,7 +650,13 @@ export function useRecorder(): UseRecorderReturn {
 
     captureStreamRef.current = stream;
     mediaRecorderRef.current = recorder;
-    activeSessionRef.current = { desktopSession, nativeAudioSessionId, fallbackChunks: [] };
+    activeSessionRef.current = {
+      desktopSession,
+      nativeAudioSessionId,
+      fallbackChunks: [],
+      projectPresentation: { padding: snapshot.presentationPadding, background: snapshot.presentationBackground },
+      projectCamera: { enabled: snapshot.includeCamera, shape: snapshot.cameraShape, position: snapshot.cameraPosition, scale: snapshot.cameraScale, mirror: snapshot.cameraMirror, opacity: snapshot.cameraOpacity },
+    };
     pendingWriteRef.current = Promise.resolve();
     completionRef.current = new Promise<void>((resolve, reject) => {
       completeRef.current = resolve;

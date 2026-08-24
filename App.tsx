@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RecorderHealth, RecordingRecord } from "./desktop/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KnouxProject, RecorderHealth, RecordingRecord } from "./desktop/contracts";
+import ProjectWorkspace, { cloneProject, type ProjectWorkspacePanel } from "./components/ProjectWorkspace";
 import { useRecorder, type CameraPipPosition, type CameraPipShape, type CaptureMode } from "./hooks/useRecorder";
 
-type Panel = "capture" | "library" | "audio" | "camera" | "settings";
+type Panel = "capture" | "library" | "editor" | "captions" | "export" | "audio" | "camera" | "settings";
 type Locale = "en" | "ar";
 
 const copy = {
   en: {
-    capture: "Capture", library: "Library", audio: "Audio Studio", camera: "Camera Studio", settings: "Settings",
+    capture: "Capture", library: "Library", editor: "Editor", captions: "Captions", export: "Export", audio: "Audio Studio", camera: "Camera Studio", settings: "Settings",
     record: "Record", stop: "Stop", pause: "Pause", resume: "Resume", ready: "Ready", recording: "Recording", paused: "Paused", finalizing: "Finalizing safely", failed: "Needs attention",
     sourcePicker: "Source picker", sourceHint: "Live desktop and application thumbnails are supplied by the Windows desktop capturer.", refresh: "Refresh", noSources: "No compatible capture sources were found.", selected: "Selected",
     display: "Display", window: "Window", region: "Region", captureMode: "Capture mode", selectRegion: "Select region", regionSelected: "Region selected", screen: "Screen", application: "Application",
@@ -16,12 +17,12 @@ const copy = {
     outputDevice: "Windows output device", refreshDevices: "Refresh devices", microphoneDevice: "Microphone device", microphoneGain: "Microphone gain", mute: "Mute", active: "Active", noMicrophone: "No microphone detected", level: "Live level", systemMeter: "System level",
     cameraDevice: "Camera device", noCamera: "No camera detected", shape: "Shape", position: "Position", size: "Size", mirror: "Mirror", opacity: "Opacity", rounded: "Rounded", circle: "Circle", square: "Square", topLeft: "Top left", topRight: "Top right", bottomLeft: "Bottom left", bottomRight: "Bottom right",
     presentation: "Presentation canvas", padding: "Padding", background: "Background", presentationNote: "Enabled canvas framing is composited before encoding, so the final recording matches these controls.",
-    last: "Latest recording", noRecording: "No recording has been finalized in this session.", open: "Open", reveal: "Show in folder", delete: "Delete", export: "Export MP4", exported: "MP4 export completed locally and was verified.", recordings: "Saved recordings", load: "Refresh library", emptyLibrary: "Your finalized local recordings will appear here.", created: "Created", duration: "Duration", sizeLabel: "Size", muxed: "System audio muxed", sidecar: "System WAV source retained",
+    last: "Latest recording", noRecording: "No recording has been finalized in this session.", open: "Open", reveal: "Show in folder", delete: "Delete", exportMp4: "Export MP4", exported: "MP4 export completed locally and was verified.", recordings: "Saved recordings", load: "Refresh library", emptyLibrary: "Your finalized local recordings will appear here.", created: "Created", duration: "Duration", sizeLabel: "Size", muxed: "System audio muxed", sidecar: "System WAV source retained",
     desktopStorage: "Local storage", folder: "Recording folder", chooseFolder: "Change folder", available: "Available", unavailable: "Unavailable", writable: "Writable", yes: "Yes", no: "No", language: "Language", english: "English", arabic: "العربية", globalShortcut: "Global shortcut", shortcutValue: "Ctrl + Shift + R",
     error: "Recorder error", dismiss: "Dismiss", desktopRequired: "Desktop capture sources are available in the KNOuX REC Windows application.", media: "Local media runtime", verified: "Verified", unavailableRuntime: "Unavailable",
   },
   ar: {
-    capture: "الالتقاط", library: "المكتبة", audio: "استديو الصوت", camera: "استديو الكاميرا", settings: "الإعدادات",
+    capture: "الالتقاط", library: "المكتبة", editor: "المحرر", captions: "التسميات", export: "التصدير", audio: "استديو الصوت", camera: "استديو الكاميرا", settings: "الإعدادات",
     record: "تسجيل", stop: "إيقاف", pause: "إيقاف مؤقت", resume: "استئناف", ready: "جاهز", recording: "جارٍ التسجيل", paused: "متوقف مؤقتاً", finalizing: "جارٍ الإنهاء بأمان", failed: "يتطلب الانتباه",
     sourcePicker: "منتقي المصدر", sourceHint: "توفر أداة سطح المكتب في Windows صوراً مصغرة حية للشاشات والتطبيقات.", refresh: "تحديث", noSources: "لم يُعثر على مصادر التقاط متوافقة.", selected: "المحدد",
     display: "شاشة", window: "نافذة", region: "منطقة", captureMode: "وضع الالتقاط", selectRegion: "اختيار منطقة", regionSelected: "تم اختيار منطقة", screen: "شاشة", application: "تطبيق",
@@ -30,7 +31,7 @@ const copy = {
     outputDevice: "جهاز إخراج Windows", refreshDevices: "تحديث الأجهزة", microphoneDevice: "جهاز الميكروفون", microphoneGain: "كسب الميكروفون", mute: "كتم", active: "نشط", noMicrophone: "لم يُكتشف ميكروفون", level: "المستوى الحي", systemMeter: "مستوى النظام",
     cameraDevice: "جهاز الكاميرا", noCamera: "لم تُكتشف كاميرا", shape: "الشكل", position: "الموضع", size: "الحجم", mirror: "مرآة", opacity: "الشفافية", rounded: "مستدير", circle: "دائري", square: "مربع", topLeft: "أعلى اليسار", topRight: "أعلى اليمين", bottomLeft: "أسفل اليسار", bottomRight: "أسفل اليمين",
     presentation: "لوحة العرض", padding: "الحشوة", background: "الخلفية", presentationNote: "يُركب إطار اللوحة المفعّل قبل الترميز، لذا يطابق التسجيل النهائي هذه العناصر.",
-    last: "أحدث تسجيل", noRecording: "لم يتم إنهاء أي تسجيل في هذه الجلسة.", open: "فتح", reveal: "إظهار في المجلد", delete: "حذف", export: "تصدير MP4", exported: "اكتمل تصدير MP4 محلياً وتم التحقق منه.", recordings: "التسجيلات المحفوظة", load: "تحديث المكتبة", emptyLibrary: "ستظهر هنا تسجيلاتك المحلية التي تم إنهاؤها.", created: "تاريخ الإنشاء", duration: "المدة", sizeLabel: "الحجم", muxed: "تم دمج صوت النظام", sidecar: "تم الاحتفاظ بمصدر WAV للنظام",
+    last: "أحدث تسجيل", noRecording: "لم يتم إنهاء أي تسجيل في هذه الجلسة.", open: "فتح", reveal: "إظهار في المجلد", delete: "حذف", exportMp4: "تصدير MP4", exported: "اكتمل تصدير MP4 محلياً وتم التحقق منه.", recordings: "التسجيلات المحفوظة", load: "تحديث المكتبة", emptyLibrary: "ستظهر هنا تسجيلاتك المحلية التي تم إنهاؤها.", created: "تاريخ الإنشاء", duration: "المدة", sizeLabel: "الحجم", muxed: "تم دمج صوت النظام", sidecar: "تم الاحتفاظ بمصدر WAV للنظام",
     desktopStorage: "التخزين المحلي", folder: "مجلد التسجيلات", chooseFolder: "تغيير المجلد", available: "المتاح", unavailable: "غير متاح", writable: "قابل للكتابة", yes: "نعم", no: "لا", language: "اللغة", english: "English", arabic: "العربية", globalShortcut: "الاختصار العام", shortcutValue: "Ctrl + Shift + R",
     error: "خطأ في المسجل", dismiss: "إغلاق", desktopRequired: "تظهر مصادر سطح المكتب داخل تطبيق KNOuX REC على Windows.", media: "محرك الوسائط المحلي", verified: "تم التحقق", unavailableRuntime: "غير متاح",
   },
@@ -82,6 +83,16 @@ export default function App() {
   const [records, setRecords] = useState<RecordingRecord[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [mediaAvailable, setMediaAvailable] = useState<boolean | null>(null);
+  const [selectedProjectRecordingId, setSelectedProjectRecordingId] = useState<string | null>(null);
+  const [project, setProject] = useState<KnouxProject | null>(null);
+  const [projectHistory, setProjectHistory] = useState<KnouxProject[]>([]);
+  const [projectHistoryIndex, setProjectHistoryIndex] = useState(0);
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectSaving, setProjectSaving] = useState(false);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const projectRef = useRef<KnouxProject | null>(null);
+  const projectHistoryRef = useRef<KnouxProject[]>([]);
+  const projectHistoryIndexRef = useRef(0);
   const t = copy[locale];
   const isBusy = state.status === "recording" || state.status === "paused" || state.status === "finalizing";
   const direction = locale === "ar" ? "rtl" : "ltr";
@@ -128,6 +139,96 @@ export default function App() {
     if (mode === "region" && state.isDesktop) await actions.selectRegion();
   };
 
+  const loadProject = useCallback(async (recordingId: string) => {
+    if (!window.knouxRec) return;
+    setProjectLoading(true);
+    setProjectError(null);
+    try {
+      const loaded = await window.knouxRec.project.get(recordingId);
+      if (!loaded) throw new Error("The recording project is not available.");
+      const snapshot = cloneProject(loaded);
+      setSelectedProjectRecordingId(recordingId);
+      projectRef.current = snapshot;
+      projectHistoryRef.current = [snapshot];
+      projectHistoryIndexRef.current = 0;
+      setProject(snapshot);
+      setProjectHistory([snapshot]);
+      setProjectHistoryIndex(0);
+    } catch (reason) {
+      projectRef.current = null;
+      projectHistoryRef.current = [];
+      projectHistoryIndexRef.current = 0;
+      setProject(null);
+      setProjectHistory([]);
+      setProjectHistoryIndex(0);
+      setProjectError(reason instanceof Error ? reason.message : "Unable to load the local project.");
+    } finally {
+      setProjectLoading(false);
+    }
+  }, []);
+
+  const updateProject = useCallback((mutator: (current: KnouxProject) => KnouxProject) => {
+    const current = projectRef.current;
+    if (!current) return;
+    const next = cloneProject(mutator(cloneProject(current)));
+    const nextHistory = [...projectHistoryRef.current.slice(0, projectHistoryIndexRef.current + 1), next];
+    projectRef.current = next;
+    projectHistoryRef.current = nextHistory;
+    projectHistoryIndexRef.current = nextHistory.length - 1;
+    setProject(next);
+    setProjectHistory(nextHistory);
+    setProjectHistoryIndex(nextHistory.length - 1);
+  }, []);
+
+  const undoProject = useCallback(() => {
+    if (projectHistoryIndexRef.current <= 0) return;
+    const previousIndex = projectHistoryIndexRef.current - 1;
+    const previous = cloneProject(projectHistoryRef.current[previousIndex]);
+    projectRef.current = previous;
+    projectHistoryIndexRef.current = previousIndex;
+    setProject(previous);
+    setProjectHistoryIndex(previousIndex);
+  }, []);
+
+  const redoProject = useCallback(() => {
+    if (projectHistoryIndexRef.current >= projectHistoryRef.current.length - 1) return;
+    const nextIndex = projectHistoryIndexRef.current + 1;
+    const next = cloneProject(projectHistoryRef.current[nextIndex]);
+    projectRef.current = next;
+    projectHistoryIndexRef.current = nextIndex;
+    setProject(next);
+    setProjectHistoryIndex(nextIndex);
+  }, []);
+
+  const saveProject = useCallback(async () => {
+    if (!window.knouxRec || !project) return;
+    setProjectSaving(true);
+    setProjectError(null);
+    try {
+      const saved = await window.knouxRec.project.save(project);
+      const snapshot = cloneProject(saved);
+      projectRef.current = snapshot;
+      projectHistoryRef.current = [snapshot];
+      projectHistoryIndexRef.current = 0;
+      setProject(snapshot);
+      setProjectHistory([snapshot]);
+      setProjectHistoryIndex(0);
+    } catch (reason) {
+      setProjectError(reason instanceof Error ? reason.message : "Unable to save the local project.");
+    } finally {
+      setProjectSaving(false);
+    }
+  }, [project]);
+
+  const openProject = useCallback((recordingId: string, targetPanel: ProjectWorkspacePanel = "editor") => {
+    setPanel(targetPanel);
+    void loadProject(recordingId);
+  }, [loadProject]);
+
+  useEffect(() => {
+    if ((panel === "editor" || panel === "captions" || panel === "export") && records.length && !selectedProjectRecordingId) void loadProject(records[0].id);
+  }, [loadProject, panel, records, selectedProjectRecordingId]);
+
   const visibleSources = state.sources.filter((source) => state.captureMode === "window" ? source.kind === "window" : source.kind === "screen");
   const selectedSource = state.sources.find((source) => source.id === state.selectedSourceId) ?? null;
   const metrics = useMemo(() => [
@@ -139,7 +240,7 @@ export default function App() {
   return <main className="app-shell" dir={direction}>
     <aside className="sidebar" aria-label="KNOuX REC navigation">
       <div className="brand"><span className="brand-mark">K</span><span><strong>KNOuX</strong><small>REC</small></span></div>
-      <nav className="nav-list">{(["capture", "library", "audio", "camera", "settings"] as Panel[]).map((item) => <button key={item} className={`nav-button ${panel === item ? "active" : ""}`} onClick={() => setPanel(item)}>{t[item]}</button>)}</nav>
+      <nav className="nav-list">{(["capture", "library", "editor", "captions", "export", "audio", "camera", "settings"] as Panel[]).map((item) => <button key={item} className={`nav-button ${panel === item ? "active" : ""}`} onClick={() => setPanel(item)}>{t[item]}</button>)}</nav>
       <div className="sidebar-foot"><span className={`status-dot ${state.status}`} />{statusLabel(state.status, t)}</div>
     </aside>
 
@@ -165,7 +266,9 @@ export default function App() {
       {panel === "camera" && <div className="studio-grid"><section className="card studio-card"><p className="eyebrow">CAMERA</p><h2>{t.cameraOverlay}</h2>{state.devices.length ? <><label className="toggle-row"><span>{t.active}</span><input type="checkbox" checked={state.includeCamera} disabled={isBusy} onChange={(event) => actions.setIncludeCamera(event.target.checked)} /></label><label>{t.cameraDevice}<select value={state.currentDevice || ""} disabled={isBusy} onChange={(event) => actions.setDevice(event.target.value)}>{state.devices.map((device) => <option key={device.deviceId} value={device.deviceId}>{device.label || t.cameraOverlay}</option>)}</select></label><label>{t.shape}<select value={state.cameraShape} disabled={isBusy} onChange={(event) => actions.setCameraShape(event.target.value as CameraPipShape)}>{cameraShapes.map((shape) => <option key={shape} value={shape}>{t[shape]}</option>)}</select></label><label>{t.position}<select value={state.cameraPosition} disabled={isBusy} onChange={(event) => actions.setCameraPosition(event.target.value as CameraPipPosition)}>{cameraPositions.map((position) => <option key={position} value={position}>{t[position.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase()) as "topLeft" | "topRight" | "bottomLeft" | "bottomRight"]}</option>)}</select></label><label>{t.size}<input type="range" min="0.12" max="0.4" step="0.01" value={state.cameraScale} disabled={isBusy} onChange={(event) => actions.setCameraScale(Number(event.target.value))} /></label><label>{t.opacity}<input type="range" min="0.2" max="1" step="0.05" value={state.cameraOpacity} disabled={isBusy} onChange={(event) => actions.setCameraOpacity(Number(event.target.value))} /></label><label className="toggle-row"><span>{t.mirror}</span><input type="checkbox" checked={state.cameraMirror} disabled={isBusy} onChange={(event) => actions.setCameraMirror(event.target.checked)} /></label></> : <div className="empty-library">{t.noCamera}</div>}</section>
         <section className="card studio-card"><p className="eyebrow">CANVAS</p><h2>{t.presentation}</h2><p className="muted">{t.presentationNote}</p><label>{t.padding}<input type="range" min="0" max="0.2" step="0.01" value={state.presentationPadding} disabled={isBusy} onChange={(event) => actions.setPresentationPadding(Number(event.target.value))} /><small>{Math.round(state.presentationPadding * 100)}%</small></label><label>{t.background}<input type="color" value={state.presentationBackground} disabled={isBusy} onChange={(event) => actions.setPresentationBackground(event.target.value)} /></label></section></div>}
 
-      {panel === "library" && <section className="card library-panel"><div className="section-heading"><div><p className="eyebrow">LOCAL MEDIA</p><h2>{t.recordings}</h2></div><button className="secondary-button" disabled={!state.isDesktop} onClick={() => void loadLibrary()}>{t.load}</button></div>{records.length ? <div className="record-table">{records.map((record) => <article key={record.id} className="record-row"><div className="record-icon">REC</div><div className="record-info"><strong>{record.fileName}</strong><span>{formatDate(record.createdAt, locale)} · {formatTime(Math.floor(record.durationMs / 1000))} · {formatBytes(record.sizeBytes)}{record.media?.video?.codec ? ` · ${record.media.video.codec.toUpperCase()}` : ""}{record.systemAudioMuxed ? ` · ${t.muxed}` : ""}</span>{record.nativeSystemAudio && <small>{t.sidecar}</small>}</div><div className="record-actions"><button className="secondary-button" onClick={() => void window.knouxRec?.recording.open(record.id)}>{t.open}</button><button className="secondary-button" onClick={() => void window.knouxRec?.recording.reveal(record.id)}>{t.reveal}</button><button className="secondary-button" onClick={() => void exportRecord(record.id)}>{t.export}</button><button className="danger-button" onClick={() => void deleteRecord(record.id)}>{t.delete}</button></div></article>)}</div> : <div className="empty-library">{state.isDesktop ? t.emptyLibrary : t.desktopRequired}</div>}</section>}
+      {panel === "library" && <section className="card library-panel"><div className="section-heading"><div><p className="eyebrow">LOCAL MEDIA</p><h2>{t.recordings}</h2></div><button className="secondary-button" disabled={!state.isDesktop} onClick={() => void loadLibrary()}>{t.load}</button></div>{records.length ? <div className="record-table">{records.map((record) => <article key={record.id} className="record-row"><div className="record-icon">REC</div><div className="record-info"><strong>{record.fileName}</strong><span>{formatDate(record.createdAt, locale)} · {formatTime(Math.floor(record.durationMs / 1000))} · {formatBytes(record.sizeBytes)}{record.media?.video?.codec ? ` · ${record.media.video.codec.toUpperCase()}` : ""}{record.systemAudioMuxed ? ` · ${t.muxed}` : ""}</span>{record.nativeSystemAudio && <small>{t.sidecar}</small>}</div><div className="record-actions"><button className="secondary-button" onClick={() => void window.knouxRec?.recording.open(record.id)}>{t.open}</button><button className="secondary-button" onClick={() => void window.knouxRec?.recording.reveal(record.id)}>{t.reveal}</button><button className="secondary-button" onClick={() => openProject(record.id, "editor")}>{t.editor}</button><button className="secondary-button" onClick={() => void exportRecord(record.id)}>{t.exportMp4}</button><button className="danger-button" onClick={() => void deleteRecord(record.id)}>{t.delete}</button></div></article>)}</div> : <div className="empty-library">{state.isDesktop ? t.emptyLibrary : t.desktopRequired}</div>}</section>}
+
+      {(panel === "editor" || panel === "captions" || panel === "export") && <ProjectWorkspace panel={panel} locale={locale} records={records} selectedRecordingId={selectedProjectRecordingId} project={project} loading={projectLoading} saving={projectSaving} dirty={projectHistoryIndex !== 0} error={projectError} canUndo={projectHistoryIndex > 0} canRedo={projectHistoryIndex < projectHistory.length - 1} onSelectRecording={(recordingId) => void loadProject(recordingId)} onChange={updateProject} onSave={() => void saveProject()} onUndo={undoProject} onRedo={redoProject} />}
 
       {panel === "settings" && <div className="settings-grid"><section className="card"><p className="eyebrow">PREFERENCES</p><h2>{t.language}</h2><div className="segmented"><button className={locale === "en" ? "active" : ""} onClick={() => void updateLocale("en")}>{t.english}</button><button className={locale === "ar" ? "active" : ""} onClick={() => void updateLocale("ar")}>{t.arabic}</button></div><h3>{t.media}</h3><p className="muted">{mediaAvailable ? t.verified : t.unavailableRuntime}</p></section><section className="card"><p className="eyebrow">{t.desktopStorage}</p><h2>{t.folder}</h2>{health ? <div className="storage-details"><code>{health.recordingDirectory}</code><div><span>{t.writable}</span><strong>{health.writable ? t.yes : t.no}</strong></div><div><span>{t.available}</span><strong>{formatBytes(health.freeBytes)}</strong></div></div> : <p className="muted">{t.unavailable}</p>}<button className="secondary-button" disabled={!state.isDesktop} onClick={() => void changeFolder()}>{t.chooseFolder}</button></section></div>}
     </section>

@@ -47,6 +47,7 @@ function validateProject(value) {
       segments: Array.isArray(value.captions?.segments) ? value.captions.segments.map((segment) => ({ id: assertString(segment?.id, "caption ID", 80), startMs: assertNumber(segment?.startMs, "caption start"), endMs: assertNumber(segment?.endMs, "caption end"), text: assertString(segment?.text, "caption text", 10000) })) : [],
     },
   };
+  if (project.timeline.cuts.length > 1) throw new Error("Only one continuous trim range is supported.");
   for (const cut of project.timeline.cuts) if (cut.endMs <= cut.startMs || cut.endMs > project.timeline.durationMs) throw new Error("Invalid cut range.");
   for (const segment of project.captions.segments) if (segment.endMs <= segment.startMs || segment.endMs > project.timeline.durationMs) throw new Error("Invalid caption range.");
   return project;
@@ -63,6 +64,12 @@ function toSrtTimestamp(milliseconds) {
 
 function formatSrt(project) {
   return project.captions.segments.map((segment, index) => `${index + 1}\n${toSrtTimestamp(segment.startMs)} --> ${toSrtTimestamp(segment.endMs)}\n${segment.text.replace(/\r?\n/g, "\n")}\n`).join("\n");
+}
+
+function getContinuousTrim(project) {
+  if (!project || !project.timeline) throw new Error("Project timeline is unavailable.");
+  const cut = project.timeline.cuts[0];
+  return cut ? { startMs: cut.startMs, endMs: cut.endMs } : { startMs: 0, endMs: project.timeline.durationMs };
 }
 
 function createProjectService({ projectDirectory }) {
@@ -103,4 +110,4 @@ function createProjectService({ projectDirectory }) {
   };
 }
 
-module.exports = { createProjectService, formatSrt };
+module.exports = { createProjectService, formatSrt, getContinuousTrim };

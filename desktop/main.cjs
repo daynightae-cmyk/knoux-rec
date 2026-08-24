@@ -6,6 +6,8 @@ const {
   globalShortcut,
   ipcMain,
   Menu,
+  net,
+  protocol,
   shell,
   Tray,
   session,
@@ -15,9 +17,12 @@ const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
 const { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
-const { createProjectService } = require("./project-service.cjs");
+const { createProjectService, getContinuousTrim } = require("./project-service.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+protocol.registerSchemesAsPrivileged([{ scheme: "knoux-rec-media", privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 
 const isDevelopment = !app.isPackaged;
 const MAX_CHUNK_BYTES = 128 * 1024 * 1024;
@@ -99,6 +104,18 @@ function saveLibrary(records) {
 
 function projectService() {
   return createProjectService({ projectDirectory: paths().projects });
+}
+
+function registerMediaProtocol() {
+  protocol.handle("knoux-rec-media", (request) => {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.hostname !== "recording") return new Response("Not found.", { status: 404 });
+    const recordingId = decodeURIComponent(requestUrl.pathname.replace(/^\//, ""));
+    if (!/^[a-zA-Z0-9_-]{1,80}$/.test(recordingId)) return new Response("Not found.", { status: 404 });
+    const record = readLibrary().find((item) => item.id === recordingId);
+    if (!record || typeof record.filePath !== "string" || !fs.existsSync(record.filePath)) return new Response("Not found.", { status: 404 });
+    return net.fetch(pathToFileURL(record.filePath).toString());
+  });
 }
 
 function journalPath(id) {
@@ -231,12 +248,12 @@ function installIpcHandlers() {
     const recordingId = assertString(value.recordingId, "recording ID", 80);
     const project = projectService().get(recordingId);
     if (!project) throw new Error("Project was not found.");
-    const format = value.format === "webm" ? "webm" : "mp4";
-    const startMs = Number.isFinite(value.startMs) ? value.startMs : 0;
-    const endMs = Number.isFinite(value.endMs) ? value.endMs : null;
+    if (value.format !== undefined && value.format !== "mp4" && value.format !== "webm") throw new Error("Unsupported export format.");
+    const format = value.format || "mp4";
+    const range = getContinuousTrim(project);
     const exportDirectory = path.join(paths().root, "exports");
     fs.mkdirSync(exportDirectory, { recursive: true });
-    return exportProjectClip({ inputPath: project.media.videoPath, outputPath: path.join(exportDirectory, `${recordingId}-${Date.now()}`), startMs, endMs, format });
+    return exportProjectClip({ inputPath: project.media.videoPath, outputPath: path.join(exportDirectory, `${recordingId}-${Date.now()}`), startMs: range.startMs, endMs: range.endMs, format });
   });
 
   ipcMain.handle("recording:start-file", (_event, input) => {
@@ -546,6 +563,7 @@ function createTray() {
 
 app.whenReady().then(() => {
   ensureDirectories();
+  registerMediaProtocol();
   configureSecurity();
   installIpcHandlers();
   createWindow();
