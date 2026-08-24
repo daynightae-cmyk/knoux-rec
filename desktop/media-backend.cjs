@@ -160,6 +160,31 @@ async function muxNativeSystemAudio({ videoPath, systemAudioPath, outputPath }) 
   }
 }
 
+async function exportProjectClip({ inputPath, outputPath, startMs = 0, endMs = null, format = "mp4" }) {
+  const source = assertExistingFile(inputPath, "Project video");
+  if (typeof outputPath !== "string" || !outputPath.trim()) throw new Error("Invalid export output path.");
+  if (!Number.isFinite(startMs) || startMs < 0 || (endMs !== null && (!Number.isFinite(endMs) || endMs <= startMs))) throw new Error("Invalid export range.");
+  if (format !== "mp4" && format !== "webm") throw new Error("Unsupported export format.");
+  const suffix = format === "mp4" ? ".mp4" : ".webm";
+  const destination = outputPath.endsWith(suffix) ? outputPath : `${outputPath}${suffix}`;
+  const temporary = `${destination}.exporting${suffix}`;
+  if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+  const args = ["-hide_banner", "-nostdin", "-y", "-ss", (startMs / 1000).toFixed(3), "-i", source];
+  if (endMs !== null) args.push("-t", ((endMs - startMs) / 1000).toFixed(3));
+  if (format === "mp4") args.push("-map", "0:v:0", "-map", "0:a?", "-c:v", "mpeg4", "-q:v", "3", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", temporary);
+  else args.push("-map", "0:v:0", "-map", "0:a?", "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-c:a", "libopus", "-b:a", "160k", temporary);
+  try {
+    await runBinary(runtimePaths().ffmpeg, args, "FFmpeg export");
+    const verified = await probeMedia(temporary);
+    if (!verified.video) throw new Error("FFprobe could not verify an exported video stream.");
+    fs.renameSync(temporary, destination);
+    return { outputPath: destination, media: verified };
+  } catch (error) {
+    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    throw error;
+  }
+}
+
 function readRuntimeManifest() {
   const { manifest, ffmpeg, ffprobe } = runtimePaths();
   if (!fs.existsSync(manifest)) {
@@ -200,4 +225,4 @@ async function detectEncoders() {
   });
 }
 
-module.exports = { detectEncoders, muxNativeSystemAudio, probeMedia, readRuntimeManifest };
+module.exports = { detectEncoders, exportProjectClip, muxNativeSystemAudio, probeMedia, readRuntimeManifest };

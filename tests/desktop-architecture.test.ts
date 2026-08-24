@@ -97,6 +97,16 @@ describe("KNOuX REC desktop architecture", () => {
     expect(app).toContain("setMicrophoneGain");
   });
 
+  it("keeps the project export path constrained and covered by a runtime MP4 smoke test", () => {
+    const mediaBackend = readProjectFile("desktop/media-backend.cjs");
+    const packageJson = readProjectFile("package.json");
+    expect(mediaBackend).toContain("async function exportProjectClip");
+    expect(mediaBackend).toContain("FFmpeg export");
+    expect(mediaBackend).toContain("mpeg4");
+    expect(packageJson).toContain("test:export");
+    expect(packageJson).toContain("export-runtime-smoke.cjs");
+  });
+
   it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
     const main = readProjectFile("desktop/main.cjs");

@@ -18,6 +18,7 @@ export default tseslint.config(
       "desktop/region-overlay.cjs",
       "scripts/desktop-capture-smoke.cjs",
       "scripts/ffmpeg-runtime-smoke.cjs",
+      "scripts/export-runtime-smoke.cjs",
     ],
   },
   js.configs.recommended,
