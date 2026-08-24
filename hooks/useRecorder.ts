@@ -195,6 +195,7 @@ export function useRecorder(): UseRecorderReturn {
   const totalPausedMsRef = useRef(0);
   const activeSessionRef = useRef<ActiveDesktopSession | null>(null);
   const pendingWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const terminalWriteErrorRef = useRef<Error | null>(null);
   const completionRef = useRef<Promise<void> | null>(null);
   const completeRef = useRef<(() => void) | null>(null);
   const failRef = useRef<((reason: Error) => void) | null>(null);
@@ -570,7 +571,7 @@ export function useRecorder(): UseRecorderReturn {
           status: "idle",
           recordingTime: Math.floor(record.durationMs / 1000),
           lastRecording: record,
-          error: projectMetadataError,
+          error: projectMetadataError ?? terminalWriteErrorRef.current?.message ?? null,
           bytesWritten: record.sizeBytes,
           chunksWritten: previous.chunksWritten,
         }));
@@ -658,6 +659,7 @@ export function useRecorder(): UseRecorderReturn {
       projectCamera: { enabled: snapshot.includeCamera, shape: snapshot.cameraShape, position: snapshot.cameraPosition, scale: snapshot.cameraScale, mirror: snapshot.cameraMirror, opacity: snapshot.cameraOpacity },
     };
     pendingWriteRef.current = Promise.resolve();
+    terminalWriteErrorRef.current = null;
     completionRef.current = new Promise<void>((resolve, reject) => {
       completeRef.current = resolve;
       failRef.current = reject;
@@ -674,6 +676,7 @@ export function useRecorder(): UseRecorderReturn {
         const desktopSessionId = active.desktopSession.id;
         pendingWriteRef.current = pendingWriteRef.current
           .then(async () => {
+            if (terminalWriteErrorRef.current) return;
             const bytes = await event.data.arrayBuffer();
             await window.knouxRec?.recording.appendChunk(desktopSessionId, bytes);
             setState((previous) => ({
@@ -684,9 +687,14 @@ export function useRecorder(): UseRecorderReturn {
           })
           .catch((error) => {
             const failure = error instanceof Error ? error : new Error("Unable to write a recording chunk.");
-            failRef.current?.(failure);
+            terminalWriteErrorRef.current = failure;
+            setState((previous) => ({
+              ...previous,
+              status: "finalizing",
+              error: `Recording stopped safely. ${failure.message}`,
+            }));
             if (recorder.state !== "inactive") recorder.stop();
-            throw failure;
+            return;
           });
       } else {
         active.fallbackChunks.push(event.data);

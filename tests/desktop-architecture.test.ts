@@ -19,6 +19,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("keeps Electron web contents isolated and disables direct Node integration", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     expect(main).toContain("nodeIntegration: false");
     expect(main).toContain("contextIsolation: true");
     expect(main).toContain("sandbox: true");
@@ -28,6 +29,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("writes incoming media chunks to a temporary file before final atomic move", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     expect(main).toContain("recording:append-chunk");
     expect(main).toContain("fs.appendFileSync(sessionRecord.temporaryPath");
     expect(main).toContain("fs.renameSync(sessionRecord.temporaryPath, filePath)");
@@ -35,12 +37,18 @@ describe("KNOuX REC desktop architecture", () => {
   });
 
   it("guards recording starts against low disk space and unwritable destinations", () => {
+    const hook = readProjectFile("hooks/useRecorder.ts");
     const main = readProjectFile("desktop/main.cjs");
+
     expect(main).toContain("MIN_FREE_RECORDING_BYTES = 512 * 1024 * 1024");
     expect(main).toContain("function assertRecordingDirectoryReady");
     expect(main).toContain("Temporary recording storage");
     expect(main).toContain("Recording folder");
     expect(main).toContain("Free disk space before recording.");
+    expect(main).toContain("Temporary recording storage fell below the safe reserve.");
+    expect(hook).toContain("terminalWriteErrorRef");
+    expect(hook).toContain("Recording stopped safely.");
+    expect(hook).toContain("terminalWriteErrorRef.current?.message");
   });
   it("uses a bounded native WASAPI helper and does not accept an empty sidecar WAV", () => {
     const helper = readProjectFile("desktop/audio-helper/Program.cs");
@@ -54,6 +62,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("keeps region selection in a transparent overlay and converts DIP to physical bounds", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     const overlay = readProjectFile("desktop/region-overlay.cjs");
     expect(main).toContain("openRegionOverlay");
     expect(overlay).toContain("transparent: true");
@@ -64,6 +73,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("uses canvas compositors for region cropping and camera PiP before encoding", () => {
     const hook = readProjectFile("hooks/useRecorder.ts");
+
     expect(hook).toContain("const composeRegion");
     expect(hook).toContain("canvas.captureStream");
     expect(hook).toContain("const composeCamera");
@@ -72,6 +82,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("writes a durable recording journal and preserves interrupted parts at shutdown", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     expect(main).toContain("function writeJournal");
     expect(main).toContain("lastCompletedChunk");
     expect(main).toContain("nativeSystemAudioPath");
@@ -82,6 +93,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("exposes constrained inspection and safe recovery for interrupted media parts", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     const preload = readProjectFile("desktop/preload.cjs");
     const recovery = readProjectFile("desktop/recovery-service.cjs");
     const app = readProjectFile("App.tsx");
@@ -101,6 +113,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("creates versioned non-destructive recording projects through narrow IPC", () => {
     const main = readProjectFile("desktop/main.cjs");
+
     const preload = readProjectFile("desktop/preload.cjs");
     const projects = readProjectFile("desktop/project-service.cjs");
     expect(main).toContain("project:get");
@@ -113,6 +126,7 @@ describe("KNOuX REC desktop architecture", () => {
 
   it("routes studio controls through real audio, camera, and presentation compositors", () => {
     const hook = readProjectFile("hooks/useRecorder.ts");
+
     const app = readProjectFile("App.tsx");
     expect(hook).toContain("audioContext.createGain()");
     expect(hook).toContain("audioContext.createAnalyser()");
@@ -131,6 +145,7 @@ describe("KNOuX REC desktop architecture", () => {
   it("exports SRT only from real caption segments in a versioned project", () => {
     const projects = readProjectFile("desktop/project-service.cjs");
     const main = readProjectFile("desktop/main.cjs");
+
     expect(projects).toContain("function formatSrt");
     expect(projects).toContain("Project has no caption segments to export.");
     expect(projects).toContain(".srt");
@@ -140,6 +155,7 @@ describe("KNOuX REC desktop architecture", () => {
   it("keeps the project export path constrained and covered by a runtime MP4 smoke test", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
     const main = readProjectFile("desktop/main.cjs");
+
     const projects = readProjectFile("desktop/project-service.cjs");
     const packageJson = readProjectFile("package.json");
     expect(mediaBackend).toContain("async function exportProjectClip");
@@ -172,6 +188,7 @@ describe("KNOuX REC desktop architecture", () => {
   it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {
     const mediaBackend = readProjectFile("desktop/media-backend.cjs");
     const main = readProjectFile("desktop/main.cjs");
+
     expect(mediaBackend).toContain("muxNativeSystemAudio");
     expect(mediaBackend).toContain("probeMedia");
     expect(mediaBackend).toContain("FFprobe could not verify both video and mixed audio streams.");

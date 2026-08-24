@@ -339,6 +339,10 @@ function installIpcHandlers() {
     if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0 || buffer.byteLength > MAX_CHUNK_BYTES) {
       throw new Error("Invalid recording chunk.");
     }
+    const freeBytes = availableBytes(path.dirname(sessionRecord.temporaryPath));
+    if (freeBytes !== null && freeBytes < MIN_FREE_RECORDING_BYTES + buffer.byteLength) {
+      throw new Error("Temporary recording storage fell below the safe reserve. Recording was stopped to preserve the saved portion.");
+    }
     fs.appendFileSync(sessionRecord.temporaryPath, Buffer.from(buffer));
     sessionRecord.bytesWritten += buffer.byteLength;
     sessionRecord.chunksWritten += 1;
