@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("knouxRec", {
       return () => ipcRenderer.removeListener("region:configuration", handler);
     },
   },
+  media: {
+    getRuntimeStatus: () => invoke("media:get-runtime-status"),
+  },
   audio: {
     listOutputDevices: () => invoke("audio:list-output-devices"),
     startNativeSystemAudio: (deviceId) => invoke("audio:start-native-system", deviceId),

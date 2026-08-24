@@ -35,3 +35,7 @@ coverage/
 # Native audio helper build cache
 desktop/audio-helper/packages/
 desktop/audio-helper/restore-diagnostic.log
+
+# Verified FFmpeg runtime and download cache (rebuilt by desktop/ffmpeg/build-runtime.ps1)
+desktop/ffmpeg/runtime/
+desktop/ffmpeg/.cache/

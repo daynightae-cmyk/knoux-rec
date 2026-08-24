@@ -29,12 +29,14 @@
     "dev:renderer": "vite --host 127.0.0.1",
     "dev:electron": "wait-on http://127.0.0.1:5173 && electron .",
     "build:audio-helper": "powershell -NoProfile -ExecutionPolicy Bypass -File desktop\\audio-helper\\build-helper.ps1",
+    "build:ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File desktop\\ffmpeg\\build-runtime.ps1",
+    "test:ffmpeg": "node scripts/ffmpeg-runtime-smoke.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "build:prod": "npm run build:audio-helper && npm run type-check && npm run lint && npm test && npm run build",
+    "build:prod": "npm run build:audio-helper && npm run build:ffmpeg && npm run test:ffmpeg && npm run type-check && npm run lint && npm test && npm run build",
     "desktop:pack": "npm run build:prod && electron-builder --dir --win",
     "desktop:dist": "npm run build:prod && electron-builder --win nsis",
     "verify:release": "node scripts/verify-release.mjs"
@@ -79,7 +81,8 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "desktop/audio-helper/runtime/**"
+      "desktop/audio-helper/runtime/**",
+      "desktop/ffmpeg/runtime/**"
     ],
     "win": {
       "icon": "public/icon.ico",

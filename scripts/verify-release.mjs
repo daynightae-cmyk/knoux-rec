@@ -7,6 +7,10 @@ const required = [
   "desktop/main.cjs",
   "desktop/preload.cjs",
   "desktop/native-audio.cjs",
+  "desktop/media-backend.cjs",
+  "desktop/ffmpeg/runtime/ffmpeg.exe",
+  "desktop/ffmpeg/runtime/ffprobe.exe",
+  "desktop/ffmpeg/runtime/manifest.json",
   "desktop/region-overlay.cjs",
   "desktop/audio-helper/runtime/KnouxRecAudioHelper.exe",
   "desktop/audio-helper/runtime/NAudio.Core.dll",
@@ -35,6 +39,7 @@ for (const channel of [
   "audio:list-output-devices",
   "audio:start-native-system",
   "region:select",
+  "media:get-runtime-status",
 ]) {
   if (!main.includes(channel)) failures.push(`Missing domain IPC handler: ${channel}`);
 }
@@ -42,6 +47,9 @@ for (const channel of [
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 if (!Array.isArray(packageJson.build?.asarUnpack) || !packageJson.build.asarUnpack.includes("desktop/audio-helper/runtime/**")) {
   failures.push("Native WASAPI runtime is not configured for ASAR unpacking.");
+}
+if (!Array.isArray(packageJson.build?.asarUnpack) || !packageJson.build.asarUnpack.includes("desktop/ffmpeg/runtime/**")) {
+  failures.push("FFmpeg runtime is not configured for ASAR unpacking.");
 }
 
 const releaseDirectory = resolve(root, "release");
@@ -53,6 +61,11 @@ if (existsSync(releaseDirectory)) {
   if (existsSync(resolve(releaseDirectory, "win-unpacked")) && (!existsSync(unpackedRuntime) || statSync(unpackedRuntime).size === 0)) {
     failures.push("Packaged application is missing the unpacked native WASAPI executable.");
   }
+  const unpackedFfmpeg = resolve(releaseDirectory, "win-unpacked/resources/app.asar.unpacked/desktop/ffmpeg/runtime/ffmpeg.exe");
+  const unpackedFfprobe = resolve(releaseDirectory, "win-unpacked/resources/app.asar.unpacked/desktop/ffmpeg/runtime/ffprobe.exe");
+  if (existsSync(resolve(releaseDirectory, "win-unpacked")) && (!existsSync(unpackedFfmpeg) || !existsSync(unpackedFfprobe) || statSync(unpackedFfmpeg).size === 0 || statSync(unpackedFfprobe).size === 0)) {
+    failures.push("Packaged application is missing the unpacked FFmpeg and FFprobe executables.");
+  }
 }
 
 if (failures.length) {
@@ -61,5 +74,5 @@ if (failures.length) {
   process.exitCode = 1;
 } else {
   console.log("KNOuX REC release verification passed.");
-  console.log("Validated secure Electron settings, native WASAPI/region IPC, ASAR-unpacked runtime, and required build artifacts.");
+  console.log("Validated secure Electron settings, native WASAPI/region/media IPC, ASAR-unpacked runtimes, and required build artifacts.");
 }

@@ -75,6 +75,49 @@ export interface NativeAudioCapture {
   stoppedAt: string | null;
 }
 
+export interface MediaProbe {
+  path: string;
+  format: string | null;
+  durationSeconds: number | null;
+  sizeBytes: number | null;
+  video: {
+    codec: string | null;
+    width: number | null;
+    height: number | null;
+    frameRate: string | null;
+  } | null;
+  audio: {
+    codec: string | null;
+    sampleRate: number | null;
+    channels: number | null;
+  } | null;
+  streams: Array<{ type: string | null; codec: string | null }>;
+}
+
+export interface MediaEncoderCapability {
+  id: string;
+  label: string;
+  available: boolean;
+  kind: "software" | "hardware";
+}
+
+export interface MediaRuntimeStatus {
+  available: boolean;
+  ffmpegPath: string;
+  ffprobePath: string;
+  manifest: {
+    assetName: string;
+    sourceUrl: string;
+    archiveSha256: string;
+    ffmpegSha256: string;
+    ffprobeSha256: string;
+    version: string;
+    license: string;
+    builtAt: string;
+  } | null;
+  encoders: MediaEncoderCapability[];
+}
+
 export interface RecordingRecord {
   id: string;
   fileName: string;
@@ -92,6 +135,8 @@ export interface RecordingRecord {
   width: number | null;
   height: number | null;
   nativeSystemAudio: NativeAudioCapture | null;
+  systemAudioMuxed: boolean;
+  media: MediaProbe | null;
 }
 
 export interface RecorderSettings {
@@ -118,6 +163,9 @@ export interface RecorderDesktopApi {
   };
   region: {
     select: () => Promise<RegionSelection>;
+  };
+  media: {
+    getRuntimeStatus: () => Promise<MediaRuntimeStatus>;
   };
   audio: {
     listOutputDevices: () => Promise<AudioOutputDevice[]>;

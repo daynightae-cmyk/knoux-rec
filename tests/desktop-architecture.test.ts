@@ -62,12 +62,27 @@ describe("KNOuX REC desktop architecture", () => {
     expect(hook).toContain("sourceCaptureStreamRef");
   });
 
+  it("uses a constrained local FFmpeg backend for muxing and post-output probing", () => {
+    const mediaBackend = readProjectFile("desktop/media-backend.cjs");
+    const main = readProjectFile("desktop/main.cjs");
+    expect(mediaBackend).toContain("muxNativeSystemAudio");
+    expect(mediaBackend).toContain("probeMedia");
+    expect(mediaBackend).toContain("FFprobe could not verify both video and mixed audio streams.");
+    expect(mediaBackend).toContain("childProcess.spawn(binaryPath, args");
+    expect(mediaBackend).not.toContain("exec(command)");
+    expect(main).toContain("media:get-runtime-status");
+    expect(main).toContain("muxNativeSystemAudio({");
+  });
+
   it("keeps release scripts connected to desktop packaging and verification", () => {
-    const packageJson = JSON.parse(readProjectFile("package.json")) as { main: string; scripts: Record<string, string> };
+    const packageJson = JSON.parse(readProjectFile("package.json")) as { main: string; scripts: Record<string, string>; build: { asarUnpack: string[] } };
     expect(packageJson.main).toBe("desktop/main.cjs");
-    expect(packageJson.scripts["build:audio-helper"]).toContain("desktop\\audio-helper\\build-helper.ps1");
+    expect(packageJson.scripts["build:audio-helper"]).toContain("build-helper.ps1");
+    expect(packageJson.scripts["build:ffmpeg"]).toContain("build-runtime.ps1");
+    expect(packageJson.scripts["test:ffmpeg"]).toContain("scripts/ffmpeg-runtime-smoke.cjs");
     expect(packageJson.scripts["desktop:pack"]).toContain("electron-builder --dir --win");
     expect(packageJson.scripts["desktop:dist"]).toContain("electron-builder --win nsis");
     expect(packageJson.scripts["verify:release"]).toContain("scripts/verify-release.mjs");
+    expect(packageJson.build.asarUnpack).toContain("desktop/ffmpeg/runtime/**");
   });
 });

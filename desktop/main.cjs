@@ -13,6 +13,7 @@ const {
 } = require("electron");
 const crypto = require("node:crypto");
 const { createNativeAudioService } = require("./native-audio.cjs");
+const { detectEncoders, muxNativeSystemAudio, probeMedia, readRuntimeManifest } = require("./media-backend.cjs");
 const { openRegionOverlay } = require("./region-overlay.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -176,6 +177,12 @@ function installIpcHandlers() {
     screen,
     preloadPath: path.join(__dirname, "preload.cjs"),
   }));
+  ipcMain.handle("media:get-runtime-status", async () => {
+    const runtime = readRuntimeManifest();
+    if (!runtime.available) return { ...runtime, encoders: [] };
+    const detected = await detectEncoders();
+    return { ...runtime, encoders: detected.encoders };
+  });
   ipcMain.handle("audio:list-output-devices", () => nativeAudio.listOutputDevices());
   ipcMain.handle("audio:start-native-system", (_event, deviceId) => nativeAudio.start(deviceId ?? null, getSettings().recordingDirectory));
   ipcMain.handle("audio:stop-native-system", async (_event, id) => nativeAudio.stop(assertString(id, "native audio ID", 80)));
@@ -238,7 +245,7 @@ function installIpcHandlers() {
     sessionRecord.hasSystemAudio = true;
   });
 
-  ipcMain.handle("recording:finish-file", (_event, input) => {
+  ipcMain.handle("recording:finish-file", async (_event, input) => {
     const value = assertObject(input, "Invalid completion metadata.");
     const id = assertString(value.id, "recording ID", 80);
     const sessionRecord = activeSessions.get(id);
@@ -250,7 +257,21 @@ function installIpcHandlers() {
 
     const filePath = recordingPathFor(sessionRecord);
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    fs.renameSync(sessionRecord.temporaryPath, filePath);
+    let media;
+    let systemAudioMuxed = false;
+    if (sessionRecord.nativeSystemAudio?.filePath) {
+      media = await muxNativeSystemAudio({
+        videoPath: sessionRecord.temporaryPath,
+        systemAudioPath: sessionRecord.nativeSystemAudio.filePath,
+        outputPath: filePath,
+      });
+      systemAudioMuxed = true;
+      fs.unlinkSync(sessionRecord.temporaryPath);
+    } else {
+      media = await probeMedia(sessionRecord.temporaryPath);
+      fs.renameSync(sessionRecord.temporaryPath, filePath);
+      media = { ...media, path: filePath, sizeBytes: fs.statSync(filePath).size };
+    }
     const record = {
       id,
       fileName: path.basename(filePath),
@@ -268,6 +289,8 @@ function installIpcHandlers() {
       width: sessionRecord.width,
       height: sessionRecord.height,
       nativeSystemAudio: sessionRecord.nativeSystemAudio || null,
+      systemAudioMuxed,
+      media,
     };
     saveLibrary([record, ...readLibrary().filter((item) => item.id !== id)]);
     activeSessions.delete(id);
@@ -279,6 +302,9 @@ function installIpcHandlers() {
     if (!sessionRecord) return;
     activeSessions.delete(sessionRecord.id);
     if (fs.existsSync(sessionRecord.temporaryPath)) fs.unlinkSync(sessionRecord.temporaryPath);
+    if (typeof sessionRecord.nativeSystemAudio?.filePath === "string" && fs.existsSync(sessionRecord.nativeSystemAudio.filePath)) {
+      fs.unlinkSync(sessionRecord.nativeSystemAudio.filePath);
+    }
   });
 
   ipcMain.handle("recording:list", () =>
