@@ -1,49 +1,55 @@
 # KNOuX REC
 
-KNOuX REC is a focused Windows desktop screen-recorder foundation. It packages a React renderer in a secure Electron shell and records through selected desktop sources with a local, incremental file-writing path.
+KNOuX REC is a Windows-first local screen recorder and lightweight non-destructive recording workspace built with React, TypeScript and a hardened Electron shell.
 
-> **Honest status:** this is a buildable, packaged desktop foundation — not yet a full production screen-recording suite. See [DELIVERY_REPORT.md](./DELIVERY_REPORT.md) for tested evidence and the remaining limitations.
+> **Current authority:** read [docs/CURRENT_BASELINE.md](./docs/CURRENT_BASELINE.md) before changing product behavior. Historical delivery reports live under [docs/history](./docs/history/).
 
-## What is implemented
+## Current product reality
 
-| Area | Current behavior |
-|---|---|
-| Secure desktop shell | Electron main process, isolated preload API, no renderer Node integration, sandbox, CSP, and validated IPC inputs |
-| Source picker | Real screen and window enumeration with desktop thumbnails and selected-source capture |
-| Recording path | MediaRecorder chunks are forwarded to a `.part` file, then moved to the finalized local recording only after real bytes are written |
-| Audio protection | Requested system audio must be present in the selected stream or recording start fails visibly; microphone mixing is supported when an input is available |
-| Library | Persisted local metadata with open, reveal, and delete operations against actual files |
-| Interface | Capture dashboard, data-written indicator, local settings, English/Arabic RTL UI, and a global `Ctrl + Shift + R` request shortcut |
-| Packaging | Windows NSIS installer and portable unpacked app, using a local KNOuX REC icon |
+The active implementation includes real screen/window capture, constrained region capture, camera PiP composition, a native WASAPI helper, incremental disk-backed recording, low-disk guards, local recording recovery, FFmpeg/FFprobe-backed media verification and export, versioned `.knouxrec` projects, trimmed project export, manual captions with SRT export, local thumbnails, library search/sorting and timeline zoom controls.
 
-## Deliberately not claimed
+The product intentionally distinguishes **implemented** from **fully runtime-verified**. Several capabilities remain PARTIAL until they pass real-device, long-session, multi-DPI, failure-recovery or installer acceptance gates.
 
-The current build does **not** claim native WASAPI loopback, separate audio tracks, region-overlay capture, camera-only/camera-overlay recording, long-recording validation, crash recovery of media containers, a timeline editor, Smart Zoom, transcription, captions, translation, FFmpeg export, or code-signing trust. These are future implementation work, not hidden or simulated features.
+## Security boundaries
+
+- `nodeIntegration: false`
+- `contextIsolation: true`
+- sandboxed renderer and `webSecurity: true`
+- narrow typed preload bridge
+- validated IPC inputs
+- no renderer access to raw shell/IPC primitives
+- local constrained media protocols and runtimes
 
 ## Development
 
-```bash
-npm install
+```powershell
+npm ci
 npm run dev
 ```
 
-## Quality gates
+Core verification:
 
-```bash
+```powershell
 npm run type-check
 npm run lint
 npm test
 npm run build
-npm run desktop:pack
-npm run desktop:dist
+npm run test:ffmpeg
+npm run test:export
+npm run test:project-export
+npm run test:caption-srt
+npm run test:recovery
 npm run verify:release
 ```
 
-The generated installer is written to `release/KNOuX-REC-<version>-Setup.exe`.
+Production packaging regenerates the ignored `dist/`, `release/` and FFmpeg build-cache directories. The verified FFmpeg runtime and installed dependencies are intentionally kept locally for fast continued development.
 
-## Technical reference
+## Status and roadmap
 
-The source picker uses Electron's `desktopCapturer` interface for screen and window enumeration.[1] The application uses a narrow context-isolated bridge rather than exposing raw IPC capabilities to the renderer.[2]
+- Current evidence: [docs/CURRENT_BASELINE.md](./docs/CURRENT_BASELINE.md)
+- Remaining work: [docs/ROADMAP.md](./docs/ROADMAP.md)
+- Detailed status matrix: [docs/PRODUCTION_STATUS.md](./docs/PRODUCTION_STATUS.md)
+- Project format: [docs/PROJECT_FORMAT.md](./docs/PROJECT_FORMAT.md)
+- Architecture notes: [docs/ELECTRON_IMPLEMENTATION_NOTES.md](./docs/ELECTRON_IMPLEMENTATION_NOTES.md)
 
-[1]: https://www.electronjs.org/docs/latest/api/desktop-capturer "Electron desktopCapturer"
-[2]: https://www.electronjs.org/docs/latest/tutorial/context-isolation "Electron Context Isolation"
+Do not resurrect old mock AI, fake system metrics, placeholder media, permissive Electron flags or duplicated standalone shells from pre-cleanup archives. Historical material is reference-only.
