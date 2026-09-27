@@ -212,16 +212,36 @@ async function generateThumbnail({ inputPath, outputPath, seekMs = 300, width = 
     throw error;
   }
 }
-function readRuntimeManifest() {
-  const { manifest, ffmpeg, ffprobe } = runtimePaths();
-  if (!fs.existsSync(manifest)) {
-    return { available: false, ffmpegPath: ffmpeg, ffprobePath: ffprobe, manifest: null };
+/*
+ * Reads the media runtime manifest.
+ *
+ * Windows PowerShell 5.1 writes UTF-8 with a BOM, so a manifest produced by an earlier
+ * build can start with U+FEFF and JSON.parse would reject it. The failure used to be
+ * swallowed, which made a working FFmpeg install report itself as unavailable, so the
+ * BOM is stripped and every failure returns a readable reason.
+ */
+function readMediaManifest(manifestPath) {
+  if (!fs.existsSync(manifestPath)) {
+    return { manifest: null, error: "The local media runtime manifest is missing. Run npm run build:ffmpeg." };
   }
   try {
-    return { available: fs.existsSync(ffmpeg) && fs.existsSync(ffprobe), ffmpegPath: ffmpeg, ffprobePath: ffprobe, manifest: JSON.parse(fs.readFileSync(manifest, "utf8")) };
-  } catch {
-    return { available: false, ffmpegPath: ffmpeg, ffprobePath: ffprobe, manifest: null };
+    const raw = fs.readFileSync(manifestPath, "utf8").replace(/^\uFEFF/, "");
+    return { manifest: JSON.parse(raw), error: null };
+  } catch (error) {
+    return { manifest: null, error: `The local media runtime manifest could not be read: ${error && error.message ? error.message : String(error)}` };
   }
+}
+
+function readRuntimeManifest() {
+  const { manifest, ffmpeg, ffprobe } = runtimePaths();
+  const parsed = readMediaManifest(manifest);
+  return {
+    available: parsed.manifest !== null && fs.existsSync(ffmpeg) && fs.existsSync(ffprobe),
+    ffmpegPath: ffmpeg,
+    ffprobePath: ffprobe,
+    manifest: parsed.manifest,
+    error: parsed.error,
+  };
 }
 
 async function detectEncoders() {
@@ -252,4 +272,4 @@ async function detectEncoders() {
   });
 }
 
-module.exports = { detectEncoders, exportProjectClip, generateThumbnail, muxNativeSystemAudio, probeMedia, readRuntimeManifest };
+module.exports = { detectEncoders, exportProjectClip, generateThumbnail, muxNativeSystemAudio, probeMedia, readMediaManifest, readRuntimeManifest };

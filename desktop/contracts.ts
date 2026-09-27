@@ -105,6 +105,8 @@ export interface MediaRuntimeStatus {
   available: boolean;
   ffmpegPath: string;
   ffprobePath: string;
+  /** Why the local runtime could not be verified, or null when it is healthy. */
+  error: string | null;
   manifest: {
     assetName: string;
     sourceUrl: string;

@@ -80,7 +80,11 @@ try {
     license = "LGPL-2.1-or-later (FFmpeg build variant: lgpl)"
     builtAt = (Get-Date).ToUniversalTime().ToString("o")
   }
-  $manifest | ConvertTo-Json | Set-Content -LiteralPath $ManifestPath -Encoding utf8
+  # Write UTF-8 without a byte-order mark. Windows PowerShell 5.1 defaults Set-Content
+  # to UTF-8 with BOM, and a leading U+FEFF makes JSON.parse reject the manifest, which
+  # would make a working FFmpeg runtime report itself as unavailable.
+  $manifestJson = $manifest | ConvertTo-Json
+  [System.IO.File]::WriteAllText($ManifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "Verified FFmpeg runtime prepared at $RuntimeDirectory"
 } finally {
   if (Test-Path -LiteralPath $temporaryDirectory) { Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force }

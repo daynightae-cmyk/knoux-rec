@@ -44,6 +44,24 @@ for (const channel of [
   if (!main.includes(channel)) failures.push(`Missing domain IPC handler: ${channel}`);
 }
 
+// The renderer is loaded with loadFile(), so every asset it references must be relative.
+// A root-absolute URL resolves to the filesystem root under file:// and yields a blank
+// window that still passes an existence check on dist/index.html.
+const builtIndex = readFileSync(resolve(root, "dist/index.html"), "utf8");
+const rootAbsoluteAssets = [...builtIndex.matchAll(/(?:src|href)="(\/[^"]+)"/g)].map((match) => match[1]);
+if (rootAbsoluteAssets.length) {
+  failures.push(`Built renderer references root-absolute assets that cannot load over file://: ${rootAbsoluteAssets.join(", ")}`);
+}
+if (!/(?:src|href)="\.\//.test(builtIndex)) {
+  failures.push("Built renderer does not reference any relative asset; the packaged window would render blank.");
+}
+const assetReferences = [...builtIndex.matchAll(/(?:src|href)="\.\/([^"]+)"/g)].map((match) => match[1]);
+for (const reference of assetReferences) {
+  if (!existsSync(resolve(root, "dist", reference))) {
+    failures.push(`Built renderer references a missing asset: ${reference}`);
+  }
+}
+
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 if (!Array.isArray(packageJson.build?.asarUnpack) || !packageJson.build.asarUnpack.includes("desktop/audio-helper/runtime/**")) {
   failures.push("Native WASAPI runtime is not configured for ASAR unpacking.");
