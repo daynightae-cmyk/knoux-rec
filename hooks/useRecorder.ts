@@ -51,6 +51,7 @@ export interface RecorderState {
   includeCamera: boolean;
   audioOutputDevices: AudioOutputDevice[];
   selectedAudioOutputId: string | null;
+  audioOutputError: string | null;
   nativeAudioCapture: NativeAudioCapture | null;
   frameRate: 30 | 60;
   bitRate: number;
@@ -170,6 +171,7 @@ export function useRecorder(): UseRecorderReturn {
     includeCamera: false,
     audioOutputDevices: [],
     selectedAudioOutputId: null,
+    audioOutputError: null,
     nativeAudioCapture: null,
     frameRate: 30,
     bitRate: QUALITY["1080p"].bitRate,
@@ -282,14 +284,23 @@ export function useRecorder(): UseRecorderReturn {
 
   const refreshAudioOutputs = useCallback(async () => {
     if (!window.knouxRec) return;
-    const audioOutputDevices = await window.knouxRec.audio.listOutputDevices();
-    setState((previous) => ({
-      ...previous,
-      audioOutputDevices,
-      selectedAudioOutputId: audioOutputDevices.some((device) => device.id === previous.selectedAudioOutputId)
-        ? previous.selectedAudioOutputId
-        : audioOutputDevices.find((device) => device.isDefault)?.id ?? audioOutputDevices[0]?.id ?? null,
-    }));
+    try {
+      const audioOutputDevices = await window.knouxRec.audio.listOutputDevices();
+      setState((previous) => ({
+        ...previous,
+        audioOutputError: null,
+        audioOutputDevices,
+        selectedAudioOutputId: audioOutputDevices.some((device) => device.id === previous.selectedAudioOutputId)
+          ? previous.selectedAudioOutputId
+          : audioOutputDevices.find((device) => device.isDefault)?.id ?? audioOutputDevices[0]?.id ?? null,
+      }));
+    } catch (error) {
+      // Record the real native-helper failure so the shell can report it, then rethrow to
+      // preserve the existing initialization and manual-refresh failure semantics.
+      const message = error instanceof Error ? error.message : "Native system audio enumeration failed.";
+      setState((previous) => ({ ...previous, audioOutputError: message }));
+      throw error;
+    }
   }, []);
 
   const initialize = useCallback(async () => {

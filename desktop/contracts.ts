@@ -245,3 +245,11 @@ export interface DesktopRecordingStats {
 export const MAX_RECORDING_CHUNK_BYTES = 128 * 1024 * 1024;
 export const MAX_SOURCE_THUMBNAIL_WIDTH = 640;
 export const MAX_SOURCE_THUMBNAIL_HEIGHT = 360;
+
+/**
+ * Free-space reserve the main process enforces before and during recording.
+ * `desktop/main.cjs` owns the guard (MIN_FREE_RECORDING_BYTES); the renderer
+ * only reads the same threshold so the UI can report the real storage state.
+ * tests/desktop-architecture.test.ts asserts both copies stay identical.
+ */
+export const MIN_FREE_RECORDING_BYTES = 512 * 1024 * 1024;

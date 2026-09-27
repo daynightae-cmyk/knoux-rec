@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KnouxProject, RecorderHealth, RecordingRecord, RecoverySession } from "./desktop/contracts";
+import type { KnouxProject, MediaRuntimeStatus, RecorderHealth, RecordingRecord, RecoverySession } from "./desktop/contracts";
 import ProjectWorkspace, { cloneProject, type ProjectWorkspacePanel } from "./components/ProjectWorkspace";
+import AppShell from "./components/dashboard/AppShell";
+import DashboardHome from "./components/dashboard/DashboardHome";
+import type { CapabilityFacts } from "./components/dashboard/capabilities";
+import type { Locale as DashboardLocale } from "./components/dashboard/services";
+import type { PanelId } from "./components/dashboard/panels";
 import { useRecorder, type CameraPipPosition, type CameraPipShape, type CaptureMode } from "./hooks/useRecorder";
 
-type Panel = "capture" | "library" | "editor" | "captions" | "export" | "audio" | "camera" | "settings";
+type Panel = PanelId;
+/** The three surfaces ProjectWorkspace owns. */
+type ProjectPanel = Extract<Panel, "editor" | "captions" | "export">;
 type Locale = "en" | "ar";
 
 const copy = {
@@ -75,9 +82,29 @@ function Meter({ value, label }: { value: number; label: string }) {
   return <div className="meter" aria-label={`${label}: ${Math.round(normalized)}%`}><div className="meter-head"><span>{label}</span><strong>{Math.round(normalized)}%</strong></div><div className="meter-rail"><i style={{ width: `${normalized}%` }} /></div></div>;
 }
 
+/**
+ * Interrupted-session recovery surface.
+ *
+ * Presentational only. Every action is the real desktop IPC call owned by App, so
+ * moving recovery into its own navigation destination did not duplicate any logic.
+ */
+function RecoveryPanel({ t, locale, sessions, busyId, error, canRefresh, onRefresh, onRecover, onDiscard }: {
+  t: TranslationSet;
+  locale: Locale;
+  sessions: RecoverySession[];
+  busyId: string | null;
+  error: string | null;
+  canRefresh: boolean;
+  onRefresh: () => void;
+  onRecover: (id: string) => void;
+  onDiscard: (id: string) => void;
+}) {
+  return <section className="card recovery-card"><div className="section-heading"><div><p className="eyebrow">RECOVERY</p><h2>{t.recovery}</h2><p>{t.recoveryHint}</p></div><button className="secondary-button" disabled={!canRefresh || busyId !== null} onClick={onRefresh}>{t.refresh}</button></div>{sessions.length ? <div className="recovery-list">{sessions.map((item) => <article className="recovery-row" key={item.id}><div><strong>{formatDate(item.createdAt || new Date().toISOString(), locale)}</strong><span>{formatBytes(item.partBytes)} · {item.chunksWritten} chunks · {item.recoverable ? t.preserved : t.blocked}</span>{item.reason && <small>{item.reason}</small>}</div><div className="record-actions">{item.recoverable && <button className="secondary-button" disabled={busyId !== null} onClick={() => onRecover(item.id)}>{t.recover}</button>}<button className="danger-button" disabled={busyId !== null} onClick={() => onDiscard(item.id)}>{t.discard}</button></div></article>)}</div> : <div className="empty-recovery">{t.noRecovery}</div>}{error && <p className="export-error">{error}</p>}</section>;
+}
+
 export default function App() {
   const { state, actions } = useRecorder();
-  const [panel, setPanel] = useState<Panel>("capture");
+  const [panel, setPanel] = useState<Panel>("dashboard");
   const [locale, setLocale] = useState<Locale>("en");
   const [health, setHealth] = useState<RecorderHealth | null>(null);
   const [records, setRecords] = useState<RecordingRecord[]>([]);
@@ -87,7 +114,7 @@ export default function App() {
   const [recoveryBusyId, setRecoveryBusyId] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [mediaAvailable, setMediaAvailable] = useState<boolean | null>(null);
+  const [mediaRuntime, setMediaRuntime] = useState<MediaRuntimeStatus | null>(null);
   const [selectedProjectRecordingId, setSelectedProjectRecordingId] = useState<string | null>(null);
   const [project, setProject] = useState<KnouxProject | null>(null);
   const [projectHistory, setProjectHistory] = useState<KnouxProject[]>([]);
@@ -119,7 +146,7 @@ export default function App() {
     if (!window.knouxRec) return;
     void Promise.all([window.knouxRec.settings.get(), loadHealth(), loadLibrary(), loadRecovery(), window.knouxRec.media.getRuntimeStatus()]).then(([settings, , , , runtime]) => {
       setLocale(settings.locale);
-      setMediaAvailable(runtime.available);
+      setMediaRuntime(runtime);
     });
   }, [loadHealth, loadLibrary, loadRecovery]);
   useEffect(() => { if (state.lastRecording) void loadLibrary(); }, [loadLibrary, state.lastRecording]);
@@ -286,17 +313,69 @@ export default function App() {
     { label: t.globalShortcut, value: t.shortcutValue },
   ], [state.bytesWritten, state.chunksWritten, state.recordingTime, t.globalShortcut, t.shortcutValue, t.timer, t.written]);
 
-  return <main className="app-shell" dir={direction}>
-    <aside className="sidebar" aria-label="KNOuX REC navigation">
-      <div className="brand"><span className="brand-mark">K</span><span><strong>KNOuX</strong><small>REC</small></span></div>
-      <nav className="nav-list">{(["capture", "library", "editor", "captions", "export", "audio", "camera", "settings"] as Panel[]).map((item) => <button key={item} className={`nav-button ${panel === item ? "active" : ""}`} onClick={() => setPanel(item)}>{t[item]}</button>)}</nav>
-      <div className="sidebar-foot"><span className={`status-dot ${state.status}`} />{statusLabel(state.status, t)}</div>
-    </aside>
+  /*
+   * Capability facts for the shell and the dashboard.
+   *
+   * Every field is read from live recorder state, a real desktop IPC result or a real
+   * disk measurement. Nothing here is a default that claims a capability exists, and
+   * nothing is memoized into a stored "ready" value.
+   */
+  const facts = useMemo<CapabilityFacts>(() => {
+    const selectedSource = state.sources.find((source) => source.id === state.selectedSourceId) ?? null;
+    const region = state.regionSelection;
+    return {
+      isDesktop: state.isDesktop,
+      isInitialized: state.isInitialized,
+      recorderState: state.status,
+      error: state.error,
+      elapsedSeconds: state.recordingTime,
+      selectedSourceLabel: selectedSource?.name ?? null,
+      screenSources: state.sources.filter((source) => source.kind === "screen").length,
+      windowSources: state.sources.filter((source) => source.kind === "window").length,
+      regionSelected: Boolean(region),
+      regionLabel: region ? `${region.physicalBounds.width} x ${region.physicalBounds.height}px` : null,
+      cameras: state.devices.length,
+      cameraEnabled: state.includeCamera,
+      microphones: state.microphoneDevices.length,
+      microphoneEnabled: state.includeMicrophone,
+      systemAudioEnabled: state.includeSystemAudio,
+      audioOutputDevices: state.audioOutputDevices.length,
+      audioHelperError: state.audioOutputError,
+      nativeAudioState: state.nativeAudioCapture?.state ?? null,
+      chunksWritten: state.chunksWritten,
+      freeBytes: health?.freeBytes ?? null,
+      storageWritable: health ? health.writable : null,
+      recordings: records.length,
+      thumbnailedRecordings: records.filter((record) => Boolean(record.thumbnailPath)).length,
+      recoverySessions: recoverySessions.length,
+      recoverableSessions: recoverySessions.filter((session) => session.recoverable).length,
+      projectOpen: Boolean(project) && Boolean(selectedProjectRecordingId),
+      captionSegments: project?.captions.segments.length ?? 0,
+      mediaAvailable: mediaRuntime ? mediaRuntime.available : null,
+      mediaVersion: mediaRuntime?.manifest?.version ?? null,
+    };
+  }, [health, mediaRuntime, project, records, recoverySessions, selectedProjectRecordingId, state]);
 
-    <section className="workspace">
-      <header className="topbar"><div><p className="eyebrow">WINDOWS RECORDING STUDIO</p><h1>{t[panel]}</h1></div><div className="topbar-actions"><button className="language-button" onClick={() => void updateLocale(locale === "en" ? "ar" : "en")}>{locale === "en" ? t.arabic : t.english}</button><div className="connection-pill"><span className={state.isDesktop ? "connected" : "disconnected"} />{state.isDesktop ? "Desktop" : "Browser"}</div></div></header>
-      {state.error && <section className="alert" role="alert"><div><strong>{t.error}</strong><p>{state.error}</p></div><button onClick={actions.clearError}>{t.dismiss}</button></section>}
-      {notice && <section className="notice"><span>{notice}</span><button onClick={() => setNotice(null)}>×</button></section>}
+  const projectPanel: ProjectPanel | null = panel === "editor" || panel === "captions" || panel === "export" ? panel : null;
+  const pendingMessages = (state.error ? 1 : 0) + (notice ? 1 : 0);
+  const shellContext = projectPanel && selectedProjectRecordingId
+    ? records.find((record) => record.id === selectedProjectRecordingId)?.fileName ?? null
+    : null;
+
+  return <AppShell
+    locale={locale as DashboardLocale}
+    active={panel}
+    direction={direction}
+    facts={facts}
+    context={shellContext}
+    pendingMessages={pendingMessages}
+    onNavigate={setPanel}
+    onClearMessages={() => setNotice(null)}
+    onToggleLocale={() => void updateLocale(locale === "en" ? "ar" : "en")}
+  >{state.error && <section className="alert" role="alert"><div><strong>{t.error}</strong><p>{state.error}</p></div><button onClick={actions.clearError}>{t.dismiss}</button></section>}
+    {notice && <section className="notice"><span>{notice}</span><button onClick={() => setNotice(null)}>×</button></section>}
+
+    {panel === "dashboard" && <DashboardHome locale={locale as DashboardLocale} facts={facts} onNavigate={setPanel} />}
 
       {panel === "capture" && <div className="capture-layout">
         <section className="capture-primary card"><div className="section-heading"><div><p className="eyebrow">CAPTURE</p><h2>{t.sourcePicker}</h2><p>{state.isDesktop ? t.sourceHint : t.desktopRequired}</p></div><button className="secondary-button" disabled={isBusy || !state.isDesktop} onClick={() => void actions.refreshSources()}>{t.refresh}</button></div>
@@ -317,9 +396,10 @@ export default function App() {
 
       {panel === "library" && <section className="card library-panel"><div className="section-heading"><div><p className="eyebrow">LOCAL MEDIA</p><h2>{t.recordings}</h2></div><button className="secondary-button" disabled={!state.isDesktop} onClick={() => void loadLibrary()}>{t.load}</button></div>{records.length ? <><div className="library-tools"><input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder={t.searchLibrary} aria-label={t.searchLibrary} /><select value={librarySort} onChange={(event) => setLibrarySort(event.target.value as typeof librarySort)} aria-label={t.recordings}><option value="newest">{t.sortNewest}</option><option value="oldest">{t.sortOldest}</option><option value="duration">{t.sortDuration}</option><option value="size">{t.sortSize}</option><option value="name">{t.sortName}</option></select></div><div className="record-table">{libraryRecords.map((record) => <article key={record.id} className="record-row"><div className="record-icon">REC{record.thumbnailPath && <img src={`knoux-rec-thumbnail://recording/${encodeURIComponent(record.id)}`} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</div><div className="record-info"><strong>{record.fileName}</strong><span>{formatDate(record.createdAt, locale)} · {formatTime(Math.floor(record.durationMs / 1000))} · {formatBytes(record.sizeBytes)}{record.media?.video?.codec ? ` · ${record.media.video.codec.toUpperCase()}` : ""}{record.systemAudioMuxed ? ` · ${t.muxed}` : ""}</span>{record.nativeSystemAudio && <small>{t.sidecar}</small>}</div><div className="record-actions"><button className="secondary-button" onClick={() => void window.knouxRec?.recording.open(record.id)}>{t.open}</button><button className="secondary-button" onClick={() => void window.knouxRec?.recording.reveal(record.id)}>{t.reveal}</button><button className="secondary-button" onClick={() => openProject(record.id, "editor")}>{t.editor}</button><button className="secondary-button" onClick={() => void exportRecord(record.id)}>{t.exportMp4}</button><button className="danger-button" onClick={() => void deleteRecord(record.id)}>{t.delete}</button></div></article>)}</div></> : <div className="empty-library">{state.isDesktop ? t.emptyLibrary : t.desktopRequired}</div>}</section>}
 
-      {(panel === "editor" || panel === "captions" || panel === "export") && <ProjectWorkspace panel={panel} locale={locale} records={records} selectedRecordingId={selectedProjectRecordingId} project={project} loading={projectLoading} saving={projectSaving} dirty={projectHistoryIndex !== 0} error={projectError} canUndo={projectHistoryIndex > 0} canRedo={projectHistoryIndex < projectHistory.length - 1} onSelectRecording={(recordingId) => void loadProject(recordingId)} onChange={updateProject} onSave={() => void saveProject()} onUndo={undoProject} onRedo={redoProject} />}
+      {projectPanel && <ProjectWorkspace panel={projectPanel} locale={locale} records={records} selectedRecordingId={selectedProjectRecordingId} project={project} loading={projectLoading} saving={projectSaving} dirty={projectHistoryIndex !== 0} error={projectError} canUndo={projectHistoryIndex > 0} canRedo={projectHistoryIndex < projectHistory.length - 1} onSelectRecording={(recordingId) => void loadProject(recordingId)} onChange={updateProject} onSave={() => void saveProject()} onUndo={undoProject} onRedo={redoProject} />}
 
-      {panel === "settings" && <div className="settings-grid"><section className="card"><p className="eyebrow">PREFERENCES</p><h2>{t.language}</h2><div className="segmented"><button className={locale === "en" ? "active" : ""} onClick={() => void updateLocale("en")}>{t.english}</button><button className={locale === "ar" ? "active" : ""} onClick={() => void updateLocale("ar")}>{t.arabic}</button></div><h3>{t.media}</h3><p className="muted">{mediaAvailable ? t.verified : t.unavailableRuntime}</p></section><section className="card"><p className="eyebrow">{t.desktopStorage}</p><h2>{t.folder}</h2>{health ? <div className="storage-details"><code>{health.recordingDirectory}</code><div><span>{t.writable}</span><strong>{health.writable ? t.yes : t.no}</strong></div><div><span>{t.available}</span><strong>{formatBytes(health.freeBytes)}</strong></div></div> : <p className="muted">{t.unavailable}</p>}<button className="secondary-button" disabled={!state.isDesktop} onClick={() => void changeFolder()}>{t.chooseFolder}</button></section><section className="card recovery-card"><div className="section-heading"><div><p className="eyebrow">RECOVERY</p><h2>{t.recovery}</h2><p>{t.recoveryHint}</p></div><button className="secondary-button" disabled={!state.isDesktop || recoveryBusyId !== null} onClick={() => void loadRecovery()}>{t.refresh}</button></div>{recoverySessions.length ? <div className="recovery-list">{recoverySessions.map((item) => <article className="recovery-row" key={item.id}><div><strong>{formatDate(item.createdAt || new Date().toISOString(), locale)}</strong><span>{formatBytes(item.partBytes)} · {item.chunksWritten} chunks · {item.recoverable ? t.preserved : t.blocked}</span>{item.reason && <small>{item.reason}</small>}</div><div className="record-actions">{item.recoverable && <button className="secondary-button" disabled={recoveryBusyId !== null} onClick={() => void recoverSession(item.id)}>{t.recover}</button>}<button className="danger-button" disabled={recoveryBusyId !== null} onClick={() => void discardRecovery(item.id)}>{t.discard}</button></div></article>)}</div> : <div className="empty-recovery">{t.noRecovery}</div>}{recoveryError && <p className="export-error">{recoveryError}</p>}</section></div>}
-    </section>
-  </main>;
+      {panel === "recovery" && <RecoveryPanel t={t} locale={locale} sessions={recoverySessions} busyId={recoveryBusyId} error={recoveryError} canRefresh={state.isDesktop} onRefresh={() => void loadRecovery()} onRecover={(id) => void recoverSession(id)} onDiscard={(id) => void discardRecovery(id)} />}
+
+      {panel === "settings" && <div className="settings-grid"><section className="card"><p className="eyebrow">PREFERENCES</p><h2>{t.language}</h2><div className="segmented"><button className={locale === "en" ? "active" : ""} onClick={() => void updateLocale("en")}>{t.english}</button><button className={locale === "ar" ? "active" : ""} onClick={() => void updateLocale("ar")}>{t.arabic}</button></div><h3>{t.media}</h3><p className="muted">{mediaRuntime?.available ? t.verified : t.unavailableRuntime}</p></section><section className="card"><p className="eyebrow">{t.desktopStorage}</p><h2>{t.folder}</h2>{health ? <div className="storage-details"><code>{health.recordingDirectory}</code><div><span>{t.writable}</span><strong>{health.writable ? t.yes : t.no}</strong></div><div><span>{t.available}</span><strong>{formatBytes(health.freeBytes)}</strong></div></div> : <p className="muted">{t.unavailable}</p>}<button className="secondary-button" disabled={!state.isDesktop} onClick={() => void changeFolder()}>{t.chooseFolder}</button></section></div>}
+  </AppShell>;
 }

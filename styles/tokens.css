@@ -1,0 +1,98 @@
+/*
+ * KNOuX REC design tokens.
+ *
+ * Single source of truth for the application shell and dashboard presentation.
+ * Component styles must reference these variables instead of raw hex values so
+ * the premium look can be retuned from one place.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: level 1 app background, level 2 panel, level 3 card, level 4 active */
+  --rec-bg: #050816;
+  --rec-bg-deep: #04060f;
+  --rec-panel: #0b1230;
+  --rec-panel-raised: #101b46;
+  --rec-card: #101a3f;
+  --rec-card-active: #16245a;
+
+  /* Ambient lighting. Kept to two layers so the background never becomes noisy. */
+  --rec-ambient-top: rgba(53, 120, 255, 0.16);
+  --rec-ambient-corner: rgba(113, 55, 255, 0.14);
+
+  /* Borders: low-opacity blue/violet rather than solid grey */
+  --rec-border: rgba(90, 110, 255, 0.18);
+  --rec-border-soft: rgba(90, 110, 255, 0.11);
+  --rec-border-strong: rgba(120, 140, 255, 0.3);
+  --rec-border-active: rgba(100, 90, 255, 0.5);
+
+  /* Brand light */
+  --rec-blue: #3578ff;
+  --rec-blue-bright: #4d8bff;
+  --rec-violet: #7137ff;
+  --rec-violet-bright: #8b5cf6;
+  --rec-magenta: #bc3cff;
+
+  /* Action + semantic */
+  --rec-record: #ff315a;
+  --rec-success: #18d7a0;
+  --rec-warning: #ffc857;
+  --rec-danger: #ff5364;
+
+  /* Text */
+  --rec-text: #f7f9ff;
+  --rec-text-secondary: #a7b3d4;
+  --rec-muted: #7180a6;
+
+  /* Radii */
+  --rec-radius-lg: 16px;
+  --rec-radius-md: 12px;
+  --rec-radius-sm: 9px;
+  --rec-radius-pill: 999px;
+
+  /* Glow levels: 1 hover, 2 active, 3 brand hero / record control */
+  --rec-glow-1: 0 0 0 1px rgba(120, 140, 255, 0.22), 0 6px 18px rgba(4, 8, 24, 0.5);
+  --rec-glow-2: 0 0 0 1px var(--rec-border-active), 0 10px 26px rgba(53, 120, 255, 0.22);
+  --rec-glow-3: 0 0 34px rgba(113, 55, 255, 0.34), 0 0 12px rgba(53, 120, 255, 0.28);
+  --rec-glow-record: 0 8px 26px rgba(255, 49, 90, 0.32);
+
+  /* Shell metrics. Reference desktop proportions: 1366x768, 1440x900, 1920x1080. */
+  --rec-sidebar-width: 214px;
+  --rec-topbar-height: 54px;
+  --rec-content-pad: 16px;
+  --rec-panel-gap: 12px;
+
+  /* Motion. Slow, premium, controlled. */
+  --rec-motion-fast: 160ms;
+  --rec-motion-base: 200ms;
+  --rec-motion-slow: 240ms;
+  --rec-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  --rec-font: "Segoe UI Variable Display", "Segoe UI", Inter, Tahoma, Arial, sans-serif;
+  --rec-font-mono: "Cascadia Mono", Consolas, "SF Mono", monospace;
+}
+
+@media (max-width: 1500px) {
+  :root {
+    --rec-sidebar-width: 204px;
+    --rec-content-pad: 14px;
+    --rec-panel-gap: 10px;
+  }
+}
+
+@media (max-width: 1380px) {
+  :root {
+    --rec-sidebar-width: 192px;
+    --rec-content-pad: 12px;
+    --rec-panel-gap: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rec-motion-fast: 1ms;
+    --rec-motion-base: 1ms;
+    --rec-motion-slow: 1ms;
+  }
+}
