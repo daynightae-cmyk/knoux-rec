@@ -73,9 +73,15 @@ try {
     Copy-Item -LiteralPath $licenseCandidate.FullName -Destination (Join-Path $RuntimeDirectory "FFMPEG-LICENSE.txt") -Force
   }
 
-  $versionOutput = (& $FfmpegPath "-hide_banner" "-version" 2>&1 | Select-Object -First 1) -join ""
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($versionOutput)) {
-    throw "The extracted ffmpeg.exe did not execute successfully."
+  # Collect the whole output before reading the exit code. Piping a native command into
+  # Select-Object -First 1 closes the pipeline early, which terminates ffmpeg mid-write and
+  # leaves $LASTEXITCODE at -1 even though the binary is fine. Verified: a direct run exits 0,
+  # the same run behind an early-closing pipeline reports -1.
+  $versionLines = @(& $FfmpegPath "-hide_banner" "-version" 2>&1)
+  $versionExitCode = $LASTEXITCODE
+  $versionOutput = ([string]($versionLines | Select-Object -First 1))
+  if ($versionExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($versionOutput)) {
+    throw "The extracted ffmpeg.exe did not execute successfully (exit code $versionExitCode)."
   }
 
   $manifest = [ordered]@{
