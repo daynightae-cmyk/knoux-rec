@@ -1,12 +1,13 @@
 param(
-  [switch]$Force
+  [switch]$Force,
+  # The upstream BtbN autobuild releases prune old assets, so a pinned URL can rot and
+  # return 404. These can be overridden to re-pin without editing this script.
+  [string]$AssetName = "ffmpeg-n9.0.2-12-gc867e13549-win64-lgpl-9.0.zip",
+  [string]$AssetUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-27-13-04/$AssetName",
+  [string]$ExpectedArchiveSha256 = "fcb8fd8a45a39b40a854162363c1b9f279ee8ac9ce9b3c6fa40914621b0f2b32"
 )
 
 $ErrorActionPreference = "Stop"
-
-$AssetName = "ffmpeg-n9.0.1-6-g9d4ca21220-win64-lgpl-9.0.zip"
-$AssetUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-23-13-03/$AssetName"
-$ExpectedArchiveSha256 = "96ee3965c8f8ba3210e59374c8b1c58f7c9552ea877d930f3fb63fac94fefcec"
 $RuntimeDirectory = Join-Path $PSScriptRoot "runtime"
 $CacheDirectory = Join-Path $PSScriptRoot ".cache"
 $ArchivePath = Join-Path $CacheDirectory $AssetName
@@ -39,7 +40,14 @@ if (!$Force -and (Test-Runtime)) {
 if (!(Test-Path -LiteralPath $ArchivePath -PathType Leaf) -or (Get-Sha256 $ArchivePath) -ne $ExpectedArchiveSha256) {
   if (Test-Path -LiteralPath $ArchivePath -PathType Leaf) { Remove-Item -Force -LiteralPath $ArchivePath }
   Write-Host "Downloading $AssetName"
-  Invoke-WebRequest -Uri $AssetUrl -OutFile $ArchivePath
+  try {
+    Invoke-WebRequest -Uri $AssetUrl -OutFile $ArchivePath -UseBasicParsing -TimeoutSec 1800
+  } catch {
+    throw ("The pinned FFmpeg archive could not be downloaded from $AssetUrl. " +
+      "Upstream BtbN autobuild releases prune previous assets, so a pin that has rotted returns 404. " +
+      "Re-pin by choosing a currently published asset and passing -AssetName, -AssetUrl and -ExpectedArchiveSha256. " +
+      "Underlying error: " + $_.Exception.Message)
+  }
 }
 
 $actualArchiveSha256 = Get-Sha256 $ArchivePath
